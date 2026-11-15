@@ -193,12 +193,27 @@
 
       <!-- Send Test SMS -->
       <div class="card-form mt-4">
-        <h2 class="h4">Send Test SMS</h2>
+        <div class="d-flex justify-content-between align-items-center mb-1">
+          <h2 class="h4 mb-0">Send Test SMS</h2>
+          {% if sms_force_demo %}
+          <span class="badge" style="background-color: #d97706; color: #ffffff; font-size: 0.72rem; padding: 4px 8px; font-weight: 600;">
+            DEMO MODE — NOT SENT
+          </span>
+          {% endif %}
+        </div>
         <p class="small text-muted mb-2">
           Automatic SMS: <strong>{{ 'Enabled' if sms_enabled else 'Disabled' }}</strong>.
-          Twilio status: <strong>{{ 'Ready' if not twilio_configuration_missing else 'Missing configuration'
-            }}</strong>.
+          Twilio status: <strong>{{ 'Ready' if not twilio_configuration_missing else 'Missing configuration' }}</strong>.
+          {% if sms_force_demo %}
+          <span class="badge ms-1" style="background-color: #d97706; color: #ffffff; font-size: 0.70rem;">DEMO MODE — NOT SENT</span>
+          {% endif %}
         </p>
+        {% if sms_force_demo %}
+        <div class="alert alert-warning py-2 px-3 mb-3 small" style="background-color: #fffbeb; color: #92400e; border: 1px solid #fde68a; border-radius: 6px;">
+          <i class="bi bi-info-circle-fill me-1 text-warning"></i>
+          <strong>DEMO MODE ACTIVE:</strong> Twilio API calls are bypassed. Test SMS and reminders are simulated safely in the database with zero charges.
+        </div>
+        {% endif %}
         {% if twilio_configuration_missing %}
         <p class="small text-warning mb-2">Missing keys: {{ twilio_configuration_missing|join(', ') }}.</p>
         {% endif %}
@@ -384,10 +399,17 @@
                 <td>{{ log.child.name if log.child else 'Test' }}{% if log.vaccine %} ({{ log.vaccine.name }}){% endif
                   %}</td>
                 <td>
-                  <span
-                    class="badge {% if log.status == 'sent' %}text-bg-success{% elif log.status == 'failed' %}text-bg-danger{% elif log.status == 'simulated' %}text-bg-info{% else %}text-bg-warning{% endif %}">
-                    {{ log.status|title }}
+                  {% if log.status == 'sent' %}
+                  <span class="badge text-bg-success"><i class="bi bi-check-circle me-1"></i>Delivered</span>
+                  {% elif log.status == 'simulated' %}
+                  <span class="badge" style="background-color: #d97706; color: #ffffff; padding: 4px 8px; font-size: 0.72rem; font-weight: 600;">
+                    DEMO MODE — NOT SENT
                   </span>
+                  {% elif log.status == 'failed' %}
+                  <span class="badge text-bg-danger"><i class="bi bi-x-circle me-1"></i>Failed</span>
+                  {% else %}
+                  <span class="badge text-bg-warning">{{ log.status|title }}</span>
+                  {% endif %}
                 </td>
                 <td class="small text-muted">{{ log.failure_reason or log.provider_message_id or '—' }}</td>
               </tr>

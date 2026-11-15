@@ -127,16 +127,50 @@ def role_required(*roles):
 
 def is_sms_configured() -> bool:
     """Check if a live SMS provider (Twilio) is configured with non-demo credentials."""
-    force_demo = current_app.config.get("SMS_FORCE_DEMO", False)
-    sid = os.getenv("TWILIO_ACCOUNT_SID")
-    token = os.getenv("TWILIO_AUTH_TOKEN")
-    from_number = os.getenv("TWILIO_PHONE_NUMBER")
-    return not force_demo and bool(sid and token and from_number)
+    sid = ""
+    token = ""
+    from_number = ""
+    try:
+        from flask import current_app
+        sid = (current_app.config.get("TWILIO_ACCOUNT_SID") or os.getenv("TWILIO_ACCOUNT_SID") or "").strip()
+        token = (current_app.config.get("TWILIO_AUTH_TOKEN") or os.getenv("TWILIO_AUTH_TOKEN") or "").strip()
+        from_number = (current_app.config.get("TWILIO_PHONE_NUMBER") or os.getenv("TWILIO_PHONE_NUMBER") or "").strip()
+        if not (sid and token and from_number):
+            try:
+                from dotenv import dotenv_values
+                ev = dotenv_values()
+                sid = sid or (ev.get("TWILIO_ACCOUNT_SID") or "").strip()
+                token = token or (ev.get("TWILIO_AUTH_TOKEN") or "").strip()
+                from_number = from_number or (ev.get("TWILIO_PHONE_NUMBER") or "").strip()
+            except Exception:
+                pass
+        if sid and token and from_number:
+            current_app.config["TWILIO_ACCOUNT_SID"] = sid
+            current_app.config["TWILIO_AUTH_TOKEN"] = token
+            current_app.config["TWILIO_PHONE_NUMBER"] = from_number
+            return True
+        if current_app.config.get("ANDROID_SMS_GATEWAY_ENABLED", False):
+            return True
+    except RuntimeError:
+        pass
+    sid = sid or os.getenv("TWILIO_ACCOUNT_SID", "").strip()
+    token = token or os.getenv("TWILIO_AUTH_TOKEN", "").strip()
+    from_number = from_number or os.getenv("TWILIO_PHONE_NUMBER", "").strip()
+    if not (sid and token and from_number):
+        try:
+            from dotenv import dotenv_values
+            ev = dotenv_values()
+            sid = sid or (ev.get("TWILIO_ACCOUNT_SID") or "").strip()
+            token = token or (ev.get("TWILIO_AUTH_TOKEN") or "").strip()
+            from_number = from_number or (ev.get("TWILIO_PHONE_NUMBER") or "").strip()
+        except Exception:
+            pass
+    return bool(sid and token and from_number)
 
 
 def send_password_reset_email(recipient, reset_url):
-    host = current_app.config.get("SMTP_HOST")
-    sender = current_app.config.get("SMTP_FROM")
+    host = current_app.config.get("MAIL_SERVER") or current_app.config.get("SMTP_HOST")
+    sender = current_app.config.get("MAIL_DEFAULT_SENDER") or current_app.config.get("SMTP_FROM")
     if not host or not sender:
         raise PasswordResetDeliveryError("Password reset email is not configured.")
 
@@ -166,8 +200,9 @@ def send_password_reset_email(recipient, reset_url):
 
 
 def _send_message(smtp, message):
-    username = current_app.config.get("SMTP_USERNAME")
-    password = current_app.config.get("SMTP_PASSWORD")
+    username = current_app.config.get("MAIL_USERNAME") or current_app.config.get("SMTP_USERNAME")
+    password = current_app.config.get("MAIL_PASSWORD") or current_app.config.get("SMTP_PASSWORD")
     if username:
-        smtp.login(username, password or "")
+        clean_password = password.replace(" ", "").strip() if password else ""
+        smtp.login(username, clean_password)
     smtp.send_message(message)

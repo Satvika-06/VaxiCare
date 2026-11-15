@@ -453,6 +453,7 @@ def test_health_check_endpoint(upgrade_app):
     assert data["status"] == "healthy"
     assert data["service"] == "vaxicare"
     assert data["database"] == "connected"
+    assert data["database_backend"] == "sqlite"
     assert "timestamp" in data
 
 

@@ -32,9 +32,9 @@ from app.models import (
 from app.scheduling import build_child_schedule as scheduled_child_entries
 from app.services import (
     generate_record_token, generate_vaccination_pdf,
-    is_valid_mobile_number, retry_failed_notification,
+    is_valid_mobile_number, normalize_phone_number, retry_failed_notification,
     run_due_reminder_check, send_sms_notification, send_test_sms,
-    send_vaccination_reminder_email,
+    send_vaccination_reminder_email, send_test_email, is_sms_demo_mode_active,
 )
 from app.auth_services import (
     PasswordResetDeliveryError, login_limiter,
@@ -82,8 +82,10 @@ def internal_error(error):
 def health_check():
     """Health check endpoint for Render, load balancers, and monitoring."""
     db_ok = True
+    db_backend = "unknown"
     try:
         db.session.execute(db.text("SELECT 1"))
+        db_backend = db.engine.name
     except Exception as exc:
         db_ok = False
         current_app.logger.error("Health check DB probe failed: %s", exc)
@@ -93,6 +95,7 @@ def health_check():
         "status": "healthy" if db_ok else "degraded",
         "service": "vaxicare",
         "database": "connected" if db_ok else "unreachable",
+        "database_backend": db_backend,
         "timestamp": utcnow().isoformat(),
     }, status_code
 
@@ -1766,7 +1769,8 @@ def admin_dashboard():
     ).order_by(EmailTestAttempt.created_at.desc()).all()
     email_test_rate_limit = _RateLimit()
     email_test_rate_limit.configured = bool(
-        current_app.config.get("SMTP_HOST") and current_app.config.get("SMTP_FROM")
+        (current_app.config.get("SMTP_HOST") or current_app.config.get("MAIL_SERVER"))
+        and (current_app.config.get("SMTP_FROM") or current_app.config.get("MAIL_DEFAULT_SENDER"))
     )
     email_test_rate_limit.attempts_in_window = len(email_attempts)
     email_test_rate_limit.max_attempts = 12
@@ -1785,10 +1789,21 @@ def admin_dashboard():
 
     # Twilio config check
     _twilio_keys = ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_PHONE_NUMBER"]
+    for k in _twilio_keys:
+        if not current_app.config.get(k):
+            val = (os.getenv(k) or "").strip()
+            if not val:
+                try:
+                    from dotenv import dotenv_values
+                    val = (dotenv_values().get(k) or "").strip()
+                except Exception:
+                    pass
+            if val:
+                current_app.config[k] = val
     twilio_configuration_missing = [k for k in _twilio_keys if not current_app.config.get(k)]
 
-    sms_enabled = _sms_configured
-    sms_force_demo = current_app.config.get("SMS_FORCE_DEMO", False)
+    sms_force_demo = is_sms_demo_mode_active()
+    sms_enabled = _sms_configured and not sms_force_demo
 
     # FCM details
     fcm_enabled = bool(
@@ -2026,10 +2041,13 @@ def admin_notifications():
     fcm_status = "Active & Configured" if (fcm_enabled and fcm_cred_path and os.path.exists(fcm_cred_path)) else ("Disabled" if not fcm_enabled else "Credentials missing")
 
     twilio_configured = bool(current_app.config.get("TWILIO_ACCOUNT_SID") and current_app.config.get("TWILIO_AUTH_TOKEN") and current_app.config.get("TWILIO_PHONE_NUMBER"))
-    sms_force_demo = current_app.config.get("SMS_FORCE_DEMO", False)
+    sms_force_demo = is_sms_demo_mode_active()
     twilio_status = "Simulated (Demo Mode)" if sms_force_demo else ("Active" if twilio_configured else "Credentials missing")
 
-    smtp_configured = bool(current_app.config.get("SMTP_HOST") and (current_app.config.get("SMTP_FROM") or current_app.config.get("MAIL_DEFAULT_SENDER")))
+    smtp_configured = bool(
+        (current_app.config.get("SMTP_HOST") or current_app.config.get("MAIL_SERVER"))
+        and (current_app.config.get("SMTP_FROM") or current_app.config.get("MAIL_DEFAULT_SENDER"))
+    )
     smtp_status = "Active & Configured" if smtp_configured else "Credentials missing"
 
     gateway_enabled = current_app.config.get("ANDROID_SMS_GATEWAY_ENABLED", False)
@@ -2074,6 +2092,7 @@ def admin_notifications():
         search=search,
         fcm_status=fcm_status,
         twilio_status=twilio_status,
+        sms_force_demo=sms_force_demo,
         smtp_status=smtp_status,
         gateway_status=gateway_status,
         total_queued=total_queued,
@@ -2240,14 +2259,27 @@ def admin_send_test_sms():
     if not form.validate_on_submit():
         flash("Enter a valid test recipient number.", "danger")
         return redirect(url_for("main.admin_dashboard"))
-    recipient = form.recipient.data.strip()
-    if not is_valid_mobile_number(recipient):
+    for k in ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_PHONE_NUMBER"]:
+        if not current_app.config.get(k):
+            val = (os.getenv(k) or "").strip()
+            if not val:
+                try:
+                    from dotenv import dotenv_values
+                    val = (dotenv_values().get(k) or "").strip()
+                except Exception:
+                    pass
+            if val:
+                current_app.config[k] = val
+
+    raw_recipient = form.recipient.data.strip()
+    normalized = normalize_phone_number(raw_recipient)
+    if not normalized or not is_valid_mobile_number(normalized):
         flash("Use a valid international number in +15551234567 format.", "danger")
         return redirect(url_for("main.admin_dashboard"))
-    result = send_test_sms(current_user, recipient)
+    result = send_test_sms(current_user, normalized)
     flash(
         result["message"],
-        "success" if result["status"] == "sent" else "info" if result["status"] == "simulated" else "danger",
+        "success" if result["status"] == "sent" else "warning" if result["status"] == "simulated" else "danger",
     )
     return redirect(url_for("main.admin_dashboard"))
 
@@ -2289,40 +2321,14 @@ def admin_send_test_email():
     db.session.add(EmailTestAttempt(user_id=current_user.id, created_at=utcnow()))
     db.session.commit()
 
-    host = current_app.config.get("SMTP_HOST")
-    sender = current_app.config.get("SMTP_FROM")
-    if not host or not sender:
-        flash("Email is not configured (SMTP_HOST or SMTP_FROM missing in configuration). Test attempt logged in demo mode.", "warning")
-        return redirect(url_for("main.admin_dashboard"))
+    result = send_test_email(recipient)
 
-    try:
-        import smtplib
-        from email.message import EmailMessage
-        msg = EmailMessage()
-        msg["Subject"] = "VaxiCare Test Email"
-        msg["From"] = sender
-        msg["To"] = recipient
-        msg.set_content("This is a VaxiCare SMTP configuration test email. If you received this, your email settings are working correctly.")
-        port = current_app.config.get("SMTP_PORT", 587)
-        if port == 465:
-            with smtplib.SMTP_SSL(host, port, timeout=10) as smtp:
-                username = current_app.config.get("SMTP_USERNAME")
-                password = current_app.config.get("SMTP_PASSWORD")
-                if username:
-                    smtp.login(username, password or "")
-                smtp.send_message(msg)
-        else:
-            with smtplib.SMTP(host, port, timeout=10) as smtp:
-                if current_app.config.get("SMTP_USE_TLS", True):
-                    smtp.starttls()
-                username = current_app.config.get("SMTP_USERNAME")
-                password = current_app.config.get("SMTP_PASSWORD")
-                if username:
-                    smtp.login(username, password or "")
-                smtp.send_message(msg)
-        flash(f"Test email sent successfully to {recipient}.", "success")
-    except Exception as exc:
-        flash(f"Test email delivery failed: {exc}", "danger")
+    if result["status"] == "sent":
+        flash(f"Test email sent successfully to {recipient} via Gmail SMTP.", "success")
+    elif result["status"] == "simulated":
+        flash(f"Email delivery in demo mode: {result['message']}", "warning")
+    else:
+        flash(f"Test email delivery failed: {result['message']}", "danger")
 
     return redirect(url_for("main.admin_dashboard"))
 

@@ -24,10 +24,51 @@ def generate_record_token():
 
 
 E164_PATTERN = re.compile(r"^\+[1-9][0-9]{7,14}$")
+EMAIL_PATTERN = re.compile(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$")
+
+
+def normalize_phone_number(mobile, default_country_code="+91"):
+    """
+    Normalizes a phone number to standard international E.164 format.
+    - Preserves already valid +CountryCode numbers (cleaning internal spaces/dashes)
+    - Adds default country code (+91) to 10-digit Indian numbers
+    - Handles leading 0 (09876543210 -> +919876543210)
+    - Handles numbers starting with 91 without '+' (919876543210 -> +919876543210)
+    - Returns None if input is invalid or cannot be normalized to E.164
+    """
+    if not mobile or not isinstance(mobile, str):
+        return None
+    cleaned = re.sub(r"[\s\-\(\)\.]", "", mobile.strip())
+    if not cleaned:
+        return None
+    if cleaned.startswith("+"):
+        digits = cleaned[1:]
+        if digits.isdigit() and 7 <= len(digits) <= 15:
+            return cleaned
+        return None
+    if cleaned.startswith("00"):
+        digits = cleaned[2:]
+        if digits.isdigit() and 7 <= len(digits) <= 15:
+            return f"+{digits}"
+        return None
+    if cleaned.startswith("0") and len(cleaned) == 11 and cleaned[1:].isdigit():
+        return f"{default_country_code}{cleaned[1:]}"
+    if len(cleaned) == 10 and cleaned.isdigit():
+        return f"{default_country_code}{cleaned}"
+    if len(cleaned) == 12 and cleaned.startswith("91") and cleaned.isdigit():
+        return f"+{cleaned}"
+    return None
 
 
 def is_valid_mobile_number(mobile):
-    return bool(mobile and E164_PATTERN.fullmatch(mobile.strip()))
+    if not mobile or not isinstance(mobile, str):
+        return False
+    norm = normalize_phone_number(mobile)
+    return bool(norm and E164_PATTERN.fullmatch(norm))
+
+
+def is_valid_email_address(email):
+    return bool(email and isinstance(email, str) and EMAIL_PATTERN.match(email.strip()))
 
 
 def build_sms_message(language, child_name, vaccine_name, due_date, reminder_type):
@@ -61,58 +102,197 @@ def _record_result(notification, status, failure_reason=None, provider_message_i
     }
 
 
+def is_sms_demo_mode_active():
+    """Return True if SMS_FORCE_DEMO is enabled via config or .env."""
+    try:
+        from flask import current_app
+        if current_app.config.get("TESTING"):
+            return bool(current_app.config.get("SMS_FORCE_DEMO", False))
+    except RuntimeError:
+        pass
+
+    try:
+        from dotenv import dotenv_values
+        raw = dotenv_values().get("SMS_FORCE_DEMO")
+        if raw is not None:
+            active = raw.strip().lower() in {"true", "1", "yes", "on"}
+            try:
+                from flask import current_app
+                current_app.config["SMS_FORCE_DEMO"] = active
+            except RuntimeError:
+                pass
+            return active
+    except Exception:
+        pass
+
+    try:
+        from flask import current_app
+        val = current_app.config.get("SMS_FORCE_DEMO")
+        if val is not None:
+            return bool(val)
+    except RuntimeError:
+        pass
+
+    return os.getenv("SMS_FORCE_DEMO", "false").strip().lower() in {"true", "1", "yes", "on"}
+
+
 def _attempt_delivery(notification, require_consent=True):
+    import socket
     user = notification.user
+    if notification.message_type == "test":
+        require_consent = False
+
     if require_consent and (not user or not user.sms_consent):
         return _record_result(notification, "skipped", "SMS consent is not enabled.")
     if not is_valid_mobile_number(notification.recipient):
         return _record_result(notification, "skipped", "Recipient phone number is missing or invalid.")
 
-    force_demo = current_app.config.get("SMS_FORCE_DEMO", False)
-    sid = os.getenv("TWILIO_ACCOUNT_SID")
-    token = os.getenv("TWILIO_AUTH_TOKEN")
-    from_number = os.getenv("TWILIO_PHONE_NUMBER")
-    if force_demo or not (sid and token and from_number):
+    normalized = normalize_phone_number(notification.recipient)
+    if normalized and normalized != notification.recipient:
+        notification.recipient = normalized[:20]
+
+    force_demo = is_sms_demo_mode_active()
+    is_testing = current_app.config.get("TESTING", False)
+    is_test_message = notification.message_type == "test"
+
+    environment = (current_app.config.get("ENV") or os.getenv("FLASK_ENV", "development")).lower()
+    if environment == "production" and force_demo and not is_testing:
+        return _record_result(
+            notification,
+            "failed",
+            "Configuration Error: SMS Demo Mode is prohibited in production.",
+        )
+
+    if force_demo:
+        return _record_result(
+            notification,
+            "simulated",
+            "SMS simulated successfully — no message was sent.",
+            provider_message_id=None,
+        )
+
+    sid = (current_app.config.get("TWILIO_ACCOUNT_SID") or os.getenv("TWILIO_ACCOUNT_SID") or "").strip()
+    token = (current_app.config.get("TWILIO_AUTH_TOKEN") or os.getenv("TWILIO_AUTH_TOKEN") or "").strip()
+    from_number = (current_app.config.get("TWILIO_PHONE_NUMBER") or os.getenv("TWILIO_PHONE_NUMBER") or "").strip()
+    if not (sid and token and from_number):
+        try:
+            from dotenv import dotenv_values
+            ev = dotenv_values()
+            sid = sid or (ev.get("TWILIO_ACCOUNT_SID") or "").strip()
+            token = token or (ev.get("TWILIO_AUTH_TOKEN") or "").strip()
+            from_number = from_number or (ev.get("TWILIO_PHONE_NUMBER") or "").strip()
+        except Exception:
+            pass
+    if sid:
+        current_app.config["TWILIO_ACCOUNT_SID"] = sid
+    if token:
+        current_app.config["TWILIO_AUTH_TOKEN"] = token
+    if from_number:
+        current_app.config["TWILIO_PHONE_NUMBER"] = from_number
+
+    if not (sid and token and from_number):
         return _record_result(notification, "simulated", "Demo mode: SMS provider credentials are not active.")
+
+    if force_demo and (is_testing or not is_test_message):
+        return _record_result(notification, "simulated", "Demo mode: SMS provider credentials are not active.")
+
     if notification.attempt_count >= current_app.config.get("SMS_MAX_ATTEMPTS", 3):
         return _record_result(notification, "failed", "SMS retry limit reached.")
 
     try:
         notification.attempt_count += 1
         db.session.commit()
-        sent = Client(sid, token).messages.create(
+        client = Client(sid, token)
+        sent = client.messages.create(
             body=notification.message,
             from_=from_number,
             to=notification.recipient,
         )
-        if not sent.sid:
+        if not sent or not getattr(sent, "sid", None):
             raise RuntimeError("SMS provider did not return an acceptance ID.")
         _record_result(notification, "sent", provider_message_id=sent.sid)
-        return {"status": "sent", "message": "SMS accepted by the provider.", "sid": sent.sid}
+        return {
+            "status": "sent",
+            "message": f"SMS accepted by provider for {notification.recipient} (SID: {sent.sid}).",
+            "sid": sent.sid,
+        }
     except TwilioRestException as exc:
-        retryable = exc.status is None or exc.status in {408, 429} or exc.status >= 500
-        return _handle_provider_failure(notification, retryable)
+        code = getattr(exc, "code", None)
+        status_code = getattr(exc, "status", None)
+        current_app.logger.warning("Twilio API error occurred (code=%s, status=%s)", code, status_code)
+
+        if code in {20003} or status_code == 401:
+            err_msg = "Twilio authentication failed: Invalid Account SID or Auth Token."
+            retryable = False
+        elif code in {21211, 21614, 21612}:
+            err_msg = f"Invalid recipient phone number '{notification.recipient}': Check phone format."
+            retryable = False
+        elif code in {21608, 21606}:
+            err_msg = f"Twilio unverified number restriction: '{notification.recipient}' must be verified in your Twilio Console."
+            retryable = False
+        elif code in {21610}:
+            err_msg = "Recipient phone number has unsubscribed from SMS notifications."
+            retryable = False
+        elif code in {20008, 21617, 21408}:
+            err_msg = "Twilio account balance insufficient or international SMS permission disabled."
+            retryable = False
+        elif code in {21659}:
+            err_msg = "Twilio regulatory restriction: A2P 10DLC or carrier registration required."
+            retryable = False
+        elif code in {572006}:
+            err_msg = (
+                "Twilio Trial Restriction (Error 572006): Free trial accounts cannot send custom SMS messages. "
+                "Upgrade your Twilio account in the Twilio Console to remove trial restrictions."
+            )
+            retryable = False
+        elif status_code in {408, 429} or (status_code and status_code >= 500):
+            err_msg = "Twilio service temporarily unavailable; retry scheduled."
+            retryable = True
+        else:
+            raw_msg = (getattr(exc, "msg", "") or "").strip()
+            if raw_msg.startswith("Unable to create record:"):
+                raw_msg = raw_msg[len("Unable to create record:"):].strip()
+            if raw_msg and len(raw_msg) < 150:
+                err_msg = f"SMS provider rejected the request: {raw_msg} (Twilio Error {code or status_code})."
+            else:
+                err_msg = f"SMS provider rejected the request (Twilio Error {code or status_code or 'unknown'})."
+            retryable = False
+
+        if is_test_message:
+            retryable = False
+
+        return _handle_provider_failure(notification, retryable, custom_message=err_msg)
+    except (socket.timeout, TimeoutError):
+        current_app.logger.warning("Twilio connection timed out")
+        retryable = not is_test_message
+        return _handle_provider_failure(notification, retryable, custom_message="Twilio connection timed out.")
+    except (ConnectionError, OSError):
+        current_app.logger.warning("Network failure connecting to Twilio")
+        retryable = not is_test_message
+        return _handle_provider_failure(notification, retryable, custom_message="Unable to connect to Twilio SMS gateway. Check network connectivity.")
     except Exception as exc:
-        current_app.logger.error("SMS provider request failed (%s).", type(exc).__name__)
-        return _handle_provider_failure(notification, retryable=True)
+        current_app.logger.error("Unexpected error during SMS dispatch: %s", type(exc).__name__)
+        return _handle_provider_failure(notification, retryable=False, custom_message="Unexpected error occurred while dispatching SMS.")
 
 
-def _handle_provider_failure(notification, retryable):
+def _handle_provider_failure(notification, retryable, custom_message=None):
     max_attempts = current_app.config.get("SMS_MAX_ATTEMPTS", 3)
+    default_msg = custom_message or "SMS provider rejected the request."
     if retryable and notification.attempt_count < max_attempts:
         notification.status = "pending"
-        notification.failure_reason = "Temporary SMS provider failure; retry scheduled."
+        notification.failure_reason = default_msg
         notification.next_attempt_at = utcnow() + timedelta(
             minutes=current_app.config.get("SMS_RETRY_MINUTES", 15)
         )
         db.session.commit()
         return {"status": "pending", "message": notification.failure_reason}
-    _record_result(notification, "failed", "SMS provider rejected the request.")
-    return {"status": "failed", "message": "SMS provider rejected the request."}
+    _record_result(notification, "failed", failure_reason=default_msg)
+    return {"status": "failed", "message": default_msg}
 
 
 def _queue_sms(user, child, vaccine, reminder_type, language, due_date, schedule_id=None, recipient_override=None):
-    recipient = (recipient_override if recipient_override is not None else (user.mobile if user else "")).strip()
+    raw_recipient = (recipient_override if recipient_override is not None else (user.mobile if user else "")).strip()
+    recipient = normalize_phone_number(raw_recipient) or raw_recipient
     notification = SmsNotification(
         user_id=user.id if user else None,
         child_id=child.id if child else None,
@@ -127,7 +307,7 @@ def _queue_sms(user, child, vaccine, reminder_type, language, due_date, schedule
         message=(
             build_sms_message(language, child.name, vaccine.name, due_date, reminder_type)
             if child and vaccine and due_date
-            else "VaxiCare test SMS. Your SMS configuration is working."
+            else "VaxiCare test SMS. Your Twilio SMS integration is configured and active."
         ),
     )
     existing = None
@@ -173,7 +353,7 @@ def send_sms_notification(
         return notification
     result = _attempt_delivery(notification)
     if result["status"] == "simulated":
-        result["message"] = "Demo mode: a simulated SMS was logged; no real SMS was sent."
+        result["message"] = "SMS simulated successfully — no message was sent."
     return result
 
 
@@ -189,12 +369,19 @@ def send_test_sms(user, recipient):
             "message": "Rate limit exceeded: maximum 10 test SMS attempts per hour.",
         }
 
-    notification = _queue_sms(user, None, None, "test", "en", None, recipient_override=recipient)
+    normalized = normalize_phone_number(recipient)
+    if not normalized or not is_valid_mobile_number(normalized):
+        return {
+            "status": "failed",
+            "message": "Invalid recipient phone number. Please use international E.164 format (e.g. +919121478435).",
+        }
+
+    notification = _queue_sms(user, None, None, "test", "en", None, recipient_override=normalized)
     if isinstance(notification, dict):
         return notification
     result = _attempt_delivery(notification, require_consent=False)
     if result["status"] == "simulated":
-        result["message"] = "Demo mode: a simulated test SMS was logged; no real SMS was sent."
+        result["message"] = "SMS simulated successfully — no message was sent."
     return result
 
 
@@ -283,18 +470,163 @@ def generate_vaccination_pdf(child, parent=None):
 
 
 
-def send_vaccination_reminder_email(recipient, child_name, vaccine_name, dose_label, due_date, reminder_type, is_test=False):
+def _send_smtp_email(recipient, subject, text_content, html_content=None):
+    """
+    Core SMTP delivery function using Gmail SMTP / standard SMTP.
+    - Validates recipient syntax.
+    - Connects to MAIL_SERVER / SMTP_HOST with TLS.
+    - Authenticates using MAIL_USERNAME / MAIL_PASSWORD (cleaning whitespace from App Passwords).
+    - Ensures success is reported only when the SMTP server accepts the message (250 OK).
+    - Protects credentials from leaking in logs or error return messages.
+    """
+    import logging
     import smtplib
+    import socket
     from email.message import EmailMessage
 
-    host = current_app.config.get("SMTP_HOST")
-    sender = current_app.config.get("SMTP_FROM") or current_app.config.get("MAIL_DEFAULT_SENDER", "info@vaxicare.local")
+    logger = logging.getLogger(__name__)
 
+    if not is_valid_email_address(recipient):
+        return {
+            "status": "failed",
+            "message": f"Invalid recipient email address format: '{recipient}'.",
+            "smtp_response": "501 Syntax error",
+        }
+
+    mail_enabled = current_app.config.get("MAIL_ENABLED", True)
+    if not mail_enabled:
+        return {
+            "status": "simulated",
+            "message": "Email delivery is disabled by configuration (MAIL_ENABLED is false).",
+            "smtp_response": None,
+        }
+
+    host = current_app.config.get("MAIL_SERVER") or current_app.config.get("SMTP_HOST")
+    sender = current_app.config.get("MAIL_DEFAULT_SENDER") or current_app.config.get("SMTP_FROM")
+    if not host or not sender:
+        return {
+            "status": "simulated",
+            "message": "SMTP not configured (MAIL_SERVER or MAIL_DEFAULT_SENDER missing); email logged in demo mode.",
+            "smtp_response": None,
+        }
+
+    port = int(current_app.config.get("MAIL_PORT") or current_app.config.get("SMTP_PORT") or 587)
+    username = current_app.config.get("MAIL_USERNAME") or current_app.config.get("SMTP_USERNAME")
+    password = current_app.config.get("MAIL_PASSWORD") or current_app.config.get("SMTP_PASSWORD") or ""
+    use_tls = current_app.config.get("MAIL_USE_TLS", current_app.config.get("SMTP_USE_TLS", True))
+
+    if password and ("gmail" in (host or "").lower() or len(password.replace(" ", "")) == 16):
+        password = password.replace(" ", "").strip()
+
+    message = EmailMessage()
+    message["Subject"] = subject
+    message["From"] = sender
+    message["To"] = recipient.strip()
+    message.set_content(text_content)
+    if html_content:
+        message.add_alternative(html_content, subtype="html")
+
+    try:
+        if port == 465:
+            with smtplib.SMTP_SSL(host, port, timeout=15) as smtp:
+                if username:
+                    smtp.login(username, password)
+                refused = smtp.send_message(message)
+                if refused:
+                    return {
+                        "status": "failed",
+                        "message": f"SMTP recipient delivery refused for {recipient}.",
+                        "smtp_response": "550 Recipient refused",
+                    }
+                return {
+                    "status": "sent",
+                    "message": f"Email successfully accepted by SMTP server for {recipient}.",
+                    "smtp_response": "250 OK",
+                }
+        else:
+            with smtplib.SMTP(host, port, timeout=15) as smtp:
+                smtp.ehlo()
+                if use_tls:
+                    smtp.starttls()
+                    smtp.ehlo()
+                if username:
+                    smtp.login(username, password)
+                refused = smtp.send_message(message)
+                if refused:
+                    return {
+                        "status": "failed",
+                        "message": f"SMTP recipient delivery refused for {recipient}.",
+                        "smtp_response": "550 Recipient refused",
+                    }
+                return {
+                    "status": "sent",
+                    "message": f"Email successfully accepted by SMTP server for {recipient}.",
+                    "smtp_response": "250 OK",
+                }
+    except smtplib.SMTPAuthenticationError:
+        logger.warning("SMTP authentication failure on server %s for sender %s", host, sender)
+        return {
+            "status": "failed",
+            "message": "Gmail SMTP authentication failed: Invalid username or App Password. Check your 16-character Google App Password.",
+            "smtp_response": "535 Authentication failed",
+        }
+    except smtplib.SMTPRecipientsRefused:
+        logger.warning("SMTP recipient refused for %s", recipient)
+        return {
+            "status": "failed",
+            "message": f"Recipient address was refused by Gmail SMTP server: {recipient}.",
+            "smtp_response": "550 Recipient refused",
+        }
+    except smtplib.SMTPSenderRefused:
+        logger.warning("SMTP sender refused for %s", sender)
+        return {
+            "status": "failed",
+            "message": "Sender address was refused by Gmail SMTP server.",
+            "smtp_response": "553 Sender refused",
+        }
+    except smtplib.SMTPDataError as exc:
+        logger.warning("SMTP data error during transmission")
+        return {
+            "status": "failed",
+            "message": "Gmail SMTP server rejected email content.",
+            "smtp_response": f"554 Data error: {getattr(exc, 'smtp_code', 554)}",
+        }
+    except (socket.timeout, TimeoutError):
+        logger.warning("SMTP connection timeout to %s:%s", host, port)
+        return {
+            "status": "failed",
+            "message": f"Connection to Gmail SMTP server timed out ({host}:{port}).",
+            "smtp_response": "Timeout",
+        }
+    except (smtplib.SMTPConnectError, ConnectionRefusedError, socket.gaierror, OSError):
+        logger.warning("SMTP connection error connecting to %s:%s", host, port)
+        return {
+            "status": "failed",
+            "message": f"Unable to connect to Gmail SMTP server ({host}:{port}). Please verify network connectivity.",
+            "smtp_response": "Connection failed",
+        }
+    except smtplib.SMTPException:
+        logger.warning("SMTP exception during delivery")
+        return {
+            "status": "failed",
+            "message": "SMTP transmission error occurred during delivery.",
+            "smtp_response": "SMTPException",
+        }
+    except Exception:
+        logger.error("Unexpected error in email dispatch")
+        return {
+            "status": "failed",
+            "message": "An unexpected error occurred while sending email.",
+            "smtp_response": "Internal error",
+        }
+
+
+def send_vaccination_reminder_email(recipient, child_name, vaccine_name, dose_label, due_date, reminder_type, is_test=False):
     due = due_date.strftime("%d %b %Y") if isinstance(due_date, (date, datetime)) else str(due_date)
     test_prefix = "[TEST] " if is_test else ""
     subject = f"{test_prefix}VaxiCare Immunization Reminder: {child_name} - {vaccine_name} ({dose_label})"
 
-    body = (
+    text_body = (
         f"{test_prefix}Dear Parent,\n\n"
         f"This is a reminder from VaxiCare regarding immunization for {child_name}.\n"
         f"Vaccine: {vaccine_name}\n"
@@ -305,37 +637,88 @@ def send_vaccination_reminder_email(recipient, child_name, vaccine_name, dose_la
         "Regards,\nVaxiCare Health Tracking Team"
     )
 
-    if not host or not sender:
-        return {"status": "simulated", "message": "SMTP not configured; reminder email logged in demo mode."}
+    badge_html = '<span style="display:inline-block;padding:4px 10px;font-size:12px;font-weight:600;border-radius:6px;background-color:#f0fdfa;color:#0f766e;border:1px solid #ccfbf1;margin-bottom:16px;">TEST NOTIFICATION</span>' if is_test else ''
+    status_label = reminder_type.replace('_', ' ').capitalize()
+    html_body = f"""<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background-color:#f8fafc;margin:0;padding:24px;color:#1e293b;">
+  <div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:12px;border:1px solid #e2e8f0;overflow:hidden;box-shadow:0 4px 6px -1px rgba(0,0,0,0.05);">
+    <div style="background-color:#0f766e;color:#ffffff;padding:24px 28px;">
+      <h1 style="margin:0;font-size:20px;font-weight:700;">VaxiCare Immunization Alert</h1>
+      <p style="margin:4px 0 0;opacity:0.85;font-size:13px;">Universal Immunization Program Monitoring</p>
+    </div>
+    <div style="padding:28px;font-size:15px;line-height:1.6;">
+      {badge_html}
+      <p>Dear Parent,</p>
+      <p>This is an automated reminder regarding the upcoming vaccination milestone for <strong>{child_name}</strong>.</p>
+      <table style="width:100%;border-collapse:collapse;margin:20px 0;background-color:#f8fafc;border-radius:8px;">
+        <tr><td style="padding:10px 16px;border-bottom:1px solid #e2e8f0;color:#64748b;font-weight:600;width:38%;">Child Name</td><td style="padding:10px 16px;border-bottom:1px solid #e2e8f0;font-weight:600;color:#0f172a;">{child_name}</td></tr>
+        <tr><td style="padding:10px 16px;border-bottom:1px solid #e2e8f0;color:#64748b;font-weight:600;">Vaccine</td><td style="padding:10px 16px;border-bottom:1px solid #e2e8f0;font-weight:600;color:#0f172a;">{vaccine_name}</td></tr>
+        <tr><td style="padding:10px 16px;border-bottom:1px solid #e2e8f0;color:#64748b;font-weight:600;">Dose</td><td style="padding:10px 16px;border-bottom:1px solid #e2e8f0;font-weight:600;color:#0f172a;">{dose_label}</td></tr>
+        <tr><td style="padding:10px 16px;border-bottom:1px solid #e2e8f0;color:#64748b;font-weight:600;">Due Date</td><td style="padding:10px 16px;border-bottom:1px solid #e2e8f0;font-weight:600;color:#0f172a;">{due}</td></tr>
+        <tr><td style="padding:10px 16px;border-bottom:1px solid #e2e8f0;color:#64748b;font-weight:600;">Status</td><td style="padding:10px 16px;border-bottom:1px solid #e2e8f0;font-weight:600;color:#0f172a;">{status_label}</td></tr>
+      </table>
+      <p>Please visit your designated Primary Health Centre (PHC) or consult your community healthcare worker (ASHA / ANM) to ensure timely immunization.</p>
+      <p style="margin-top:24px;color:#64748b;font-size:13px;">Warm regards,<br><strong>VaxiCare Child Health Tracking System</strong></p>
+    </div>
+    <div style="background-color:#f8fafc;border-top:1px solid #e2e8f0;padding:16px 28px;font-size:12px;color:#64748b;text-align:center;">
+      This is an automated healthcare advisory from VaxiCare. Please do not reply directly to this email.
+    </div>
+  </div>
+</body>
+</html>"""
 
-    message = EmailMessage()
-    message["Subject"] = subject
-    message["From"] = sender
-    message["To"] = recipient
-    message.set_content(body)
+    return _send_smtp_email(recipient, subject, text_body, html_body)
 
-    try:
-        port = current_app.config.get("SMTP_PORT", 587)
-        if port == 465:
-            with smtplib.SMTP_SSL(host, port, timeout=15) as smtp:
-                username = current_app.config.get("SMTP_USERNAME")
-                password = current_app.config.get("SMTP_PASSWORD")
-                if username:
-                    smtp.login(username, password or "")
-                smtp.send_message(message)
-                return {"status": "sent", "message": "Email accepted by SMTP server.", "smtp_response": "250 OK"}
-        else:
-            with smtplib.SMTP(host, port, timeout=15) as smtp:
-                if current_app.config.get("SMTP_USE_TLS", True):
-                    smtp.starttls()
-                username = current_app.config.get("SMTP_USERNAME")
-                password = current_app.config.get("SMTP_PASSWORD")
-                if username:
-                    smtp.login(username, password or "")
-                smtp.send_message(message)
-                return {"status": "sent", "message": "Email accepted by SMTP server.", "smtp_response": "250 OK"}
-    except Exception as exc:
-        return {"status": "failed", "message": f"SMTP delivery failed: {exc}"}
+
+def send_test_email(recipient):
+    """
+    Sends a test verification email via SMTP to verify Gmail credentials.
+    """
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC")
+    subject = "[TEST] VaxiCare SMTP Delivery Verification"
+    text_body = (
+        "Hello,\n\n"
+        "This is a test notification from your VaxiCare Vaccination Tracking System.\n"
+        "Your Gmail SMTP email configuration is active and working correctly!\n\n"
+        f"Recipient: {recipient}\n"
+        f"Timestamp: {now_str}\n"
+        "Status: 250 OK (SMTP Handshake & Message Accepted)\n\n"
+        "If you received this message, automatic parent vaccination reminders and manual "
+        "clinical notifications will be delivered reliably.\n\n"
+        "Regards,\nVaxiCare Development & Health Administration Team"
+    )
+
+    html_body = f"""<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background-color:#f8fafc;margin:0;padding:24px;color:#1e293b;">
+  <div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:12px;border:1px solid #e2e8f0;overflow:hidden;box-shadow:0 4px 6px -1px rgba(0,0,0,0.05);">
+    <div style="background-color:#0f766e;color:#ffffff;padding:24px 28px;">
+      <h1 style="margin:0;font-size:20px;font-weight:700;">VaxiCare SMTP Verification</h1>
+      <p style="margin:4px 0 0;opacity:0.85;font-size:13px;">Email Gateway Diagnostic Test</p>
+    </div>
+    <div style="padding:28px;font-size:15px;line-height:1.6;">
+      <span style="display:inline-block;padding:6px 12px;font-size:13px;font-weight:700;border-radius:6px;background-color:#ecfdf5;color:#047857;border:1px solid #a7f3d0;margin-bottom:16px;">&#10003; SMTP Delivery Active</span>
+      <p>Hello,</p>
+      <p>This is a test notification confirming that your VaxiCare <strong>Gmail SMTP</strong> email integration is properly configured and functional.</p>
+      <div style="background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin:18px 0;font-size:13px;">
+        <div style="margin-bottom:6px;"><strong>Recipient:</strong> {recipient}</div>
+        <div style="margin-bottom:6px;"><strong>Status:</strong> 250 OK (Message Accepted by Gmail SMTP)</div>
+        <div><strong>Timestamp:</strong> {now_str}</div>
+      </div>
+      <p>With this connection confirmed, both automatic milestone reminders and manual clinical notifications will be delivered to parents without interruption.</p>
+      <p style="margin-top:24px;color:#64748b;font-size:13px;">Regards,<br><strong>VaxiCare Development & Health Administration Team</strong></p>
+    </div>
+    <div style="background-color:#f8fafc;border-top:1px solid #e2e8f0;padding:16px 28px;font-size:12px;color:#64748b;text-align:center;">
+      VaxiCare Digital Immunization Platform · Admin Diagnostic Email
+    </div>
+  </div>
+</body>
+</html>"""
+
+    return _send_smtp_email(recipient, subject, text_body, html_body)
 
 
 
@@ -721,9 +1104,10 @@ def retry_failed_notification(channel, notification_id):
         notification = db.session.get(SmsNotification, notification_id)
         if not notification:
             return {"status": "error", "message": "SMS notification not found."}
-        if notification.status not in {"failed", "pending", "simulated"}:
+        if notification.status not in {"failed", "pending", "simulated", "skipped"}:
             return {"status": "error", "message": f"Cannot retry notification with status '{notification.status}'."}
-        res = _attempt_delivery(notification, require_consent=bool(notification.user_id))
+        require_consent = bool(notification.user_id) and notification.message_type != "test"
+        res = _attempt_delivery(notification, require_consent=require_consent)
         return res
     elif channel == "email":
         notification = db.session.get(EmailReminderNotification, notification_id)
