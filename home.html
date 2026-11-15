@@ -1,0 +1,107 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ t('site_name') }}{% endblock %}
+
+{% block content %}
+<section class="hero-section">
+  <div class="container py-5">
+    <div class="row align-items-center gy-4">
+      <div class="col-lg-7">
+        <span class="hero-badge">Community Health Tracking</span>
+        <h1 class="display-5 fw-bold mb-3">{{ t('hero_title') }}</h1>
+        <p class="lead text-muted">{{ t('hero_subtitle') }}</p>
+        <div class="d-flex gap-3 flex-wrap my-4">
+          <a class="btn btn-primary btn-lg" href="{{ url_for('main.parent_register') }}">{{ t('cta_register') }}</a>
+          <a class="btn btn-outline-primary btn-lg" href="{{ url_for('main.parent_login') }}">{{ t('cta_login') }}</a>
+        </div>
+        <div class="row g-3">
+          <div class="col-md-3 col-6">
+            <div class="mini-stat">
+              <h4>1,250</h4>
+              <small>{{ t('stats_children') }}</small>
+            </div>
+          </div>
+          <div class="col-md-3 col-6">
+            <div class="mini-stat">
+              <h4>18</h4>
+              <small>{{ t('stats_vaccines') }}</small>
+            </div>
+          </div>
+          <div class="col-md-3 col-6">
+            <div class="mini-stat">
+              <h4>96%</h4>
+              <small>{{ t('stats_reminders') }}</small>
+            </div>
+          </div>
+          <div class="col-md-3 col-6">
+            <div class="mini-stat">
+              <h4>24</h4>
+              <small>{{ t('stats_workers') }}</small>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-5">
+        <div class="hero-card">
+          <div class="card-top text-center">
+            <i class="bi bi-shield-check"></i>
+          </div>
+          <div class="card-body p-4">
+            <h3 class="mb-3">Immunization at a glance</h3>
+            <ul class="feature-list">
+              <li>Secure child records</li>
+              <li>Due-date tracking</li>
+              <li>SMS reminders and follow-up</li>
+              <li>Digital vaccination cards</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="container py-5">
+  <div class="section-heading text-center mb-4">
+    <span class="eyebrow">{{ t('section_features') }}</span>
+    <h2>Built for parents, workers and public health teams</h2>
+  </div>
+  <div class="row g-4">
+    <div class="col-md-4">
+      <div class="info-card h-100">
+        <i class="bi bi-prescription2 feature-icon"></i>
+        <h4>Child vaccination management</h4>
+        <p>Track each child’s immunization schedule with due dates, completed doses and reminders.</p>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="info-card h-100">
+        <i class="bi bi-people feature-icon"></i>
+        <h4>Healthcare follow-up</h4>
+        <p>Healthcare workers can quickly review children, search by village name, and log administered vaccines.</p>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="info-card h-100">
+        <i class="bi bi-qr-code-scan feature-icon"></i>
+        <h4>Secure record access</h4>
+        <p>Each child gets a private QR-coded record link and downloadable vaccination card for easy sharing.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section-cta">
+  <div class="container py-5">
+    <div class="row align-items-center">
+      <div class="col-lg-8">
+        <h2>{{ t('section_about') }}</h2>
+        <p class="mb-0">VaxiCare helps communities reduce missed immunizations through structured reminders, accessible records and real-time health data support.</p>
+      </div>
+      <div class="col-lg-4 text-lg-end">
+        <a href="{{ url_for('main.about') }}" class="btn btn-primary btn-lg">Learn more</a>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

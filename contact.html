@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+{% block title %}{{ t('contact_title') }}{% endblock %}
+
+{% block content %}
+<section class="container py-5">
+  <div class="row g-4">
+    <div class="col-lg-6">
+      <div class="info-card h-100">
+        <span class="eyebrow">{{ t('section_contact') }}</span>
+        <h1>Contact and Help</h1>
+        <p>Need support with reminders, registration, or vaccination record access? Reach out to the local health support team.</p>
+        <ul class="list-unstyled feature-list compact">
+          <li><i class="bi bi-telephone-fill text-primary me-2"></i> +91 98765 43210</li>
+          <li><i class="bi bi-envelope-fill text-primary me-2"></i> support@vaxicare.in</li>
+          <li><i class="bi bi-geo-alt-fill text-primary me-2"></i> Community Health Center, Madhapur</li>
+        </ul>
+      </div>
+    </div>
+    <div class="col-lg-6">
+      <div class="card-form">
+        <h3>Quick help</h3>
+        <p class="small text-muted">{{ t('sms_note') }}</p>
+        <p class="small text-muted">{{ t('demo_note') }}</p>
+        <a href="{{ url_for('main.home') }}" class="btn btn-primary">Return home</a>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

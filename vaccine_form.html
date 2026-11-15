@@ -1,0 +1,38 @@
+{% extends 'base.html' %}
+{% block title %}Add Vaccine · VaxiCare{% endblock %}
+{% block content %}
+<section class="container py-4 py-lg-5">
+  <div class="row justify-content-center">
+    <div class="col-lg-8 col-xl-7">
+      <div class="card-form">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
+          <div>
+            <span class="eyebrow">Administrator</span>
+            <h1 class="h2 mt-3 mb-2">Add a vaccine</h1>
+            <p class="text-muted mb-0">Enter the vaccine details for the VaxiCare information catalogue.</p>
+          </div>
+          <a href="{{ url_for('main.admin_dashboard') }}" class="btn btn-outline-primary">Back to dashboard</a>
+        </div>
+        <form method="POST" action="{{ url_for('main.add_vaccine') }}" novalidate>
+          {{ form.hidden_tag() }}
+          {% for field in [form.name, form.disease, form.description, form.category, form.recommended_age, form.source, form.source_checked_on] %}
+            <div class="mb-3">
+              {{ field.label(class_='form-label') }}
+              {% if field.name == 'description' %}
+                {{ field(class_='form-control', rows=4) }}
+              {% else %}
+                {{ field(class_='form-control') }}
+              {% endif %}
+              {% for error in field.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+            </div>
+          {% endfor %}
+          <div class="d-flex gap-2 flex-wrap">
+            {{ form.submit(class_='btn btn-primary px-4') }}
+            <a href="{{ url_for('main.admin_dashboard') }}" class="btn btn-outline-secondary">Cancel</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

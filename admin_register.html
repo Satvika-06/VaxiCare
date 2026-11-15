@@ -1,0 +1,64 @@
+{% extends 'base.html' %}
+{% block title %}Admin account registration · VaxiCare{% endblock %}
+{% block content %}
+<section class="auth-shell container py-4 py-lg-5">
+  <div class="auth-card">
+    <aside class="auth-aside auth-aside-admin">
+      <a class="auth-brand" href="{{ url_for('main.home') }}"><span class="brand-mark">V</span> VaxiCare</a>
+      <div class="auth-illustration" aria-hidden="true"><i class="bi bi-shield-lock-fill"></i><span class="auth-orbit"><i class="bi bi-person-plus-fill"></i></span></div>
+      <h1>Trusted access starts here.</h1>
+      <p>Administrative accounts can manage sensitive community health records and system settings.</p>
+      <div class="auth-trust"><i class="bi bi-person-lock" aria-hidden="true"></i> Only an existing admin may create admin accounts</div>
+    </aside>
+    <div class="auth-content">
+      <div class="auth-form-wrap">
+        <span class="eyebrow">Restricted setup</span>
+        <h2 class="mt-3 mb-2">Admin registration</h2>
+        {% if not authorized %}
+          <div class="alert alert-info mt-4" role="status">Admin account creation requires authorization by an existing administrator. Public registration is disabled.</div>
+          <a class="btn btn-primary auth-submit mt-2" href="{{ url_for('main.admin_login') }}">Return to Admin Login</a>
+        {% else %}
+          <p class="text-muted mb-4">Create an additional administrator account.</p>
+          <form method="POST" novalidate>
+            {{ form.hidden_tag() }}
+            {% for field in [form.full_name, form.username, form.email] %}
+            <div class="mb-3">
+              {{ field.label(class_='form-label') }}
+              {{ field(class_='form-control form-control-lg', autocomplete='email' if field.name == 'email' else 'username' if field.name == 'username' else 'name') }}
+              {% for error in field.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+            </div>
+            {% endfor %}
+            {% for field, field_id in [(form.password, 'admin-password'), (form.confirm_password, 'admin-confirm-password')] %}
+            <div class="mb-3">
+              {{ field.label(class_='form-label') }}
+              <div class="password-input">
+                {{ field(class_='form-control form-control-lg', id=field_id, autocomplete='new-password') }}
+                <button class="password-toggle" type="button" data-password-toggle="{{ field_id }}" aria-label="Show password" aria-pressed="false"><i class="bi bi-eye" aria-hidden="true"></i></button>
+              </div>
+              {% for error in field.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+            </div>
+            {% endfor %}
+            {{ form.submit(class_='btn btn-primary btn-lg w-100 auth-submit', value='Create administrator account') }}
+          </form>
+        {% endif %}
+        <div class="auth-separator"><span>Account access</span></div>
+        <p class="auth-bottom"><a href="{{ url_for('main.admin_login') }}">Return to Admin Login</a></p>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+  document.querySelectorAll("[data-password-toggle]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const input = document.getElementById(button.dataset.passwordToggle);
+      const visible = input.type === "password";
+      input.type = visible ? "text" : "password";
+      button.setAttribute("aria-pressed", String(visible));
+      button.setAttribute("aria-label", visible ? "Hide password" : "Show password");
+      button.innerHTML = `<i class="bi ${visible ? "bi-eye-slash" : "bi-eye"}" aria-hidden="true"></i>`;
+    });
+  });
+</script>
+{% endblock %}

@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+
+{% block title %}About | {{ t('site_name') }}{% endblock %}
+
+{% block content %}
+<section class="container py-5">
+  <div class="section-heading mb-4">
+    <span class="eyebrow">{{ t('nav_about') }}</span>
+    <h1>About VaxiCare</h1>
+  </div>
+  <div class="row g-4">
+    <div class="col-lg-8">
+      <div class="info-card">
+        <p>VaxiCare is a bilingual, community-oriented immunization and health tracking system designed for families, frontline health workers and administrators. It simplifies the management of child vaccination data while encouraging timely follow-up for vaccines due today, upcoming or overdue.</p>
+        <p>Our goal is to improve public health awareness and promote stronger community-level vaccination coverage without replacing medical advice from authorized professionals. The reference schedule in the system is based on the Government of India UIP National Immunization Schedule and must be confirmed by a qualified healthcare provider.</p>
+      </div>
+    </div>
+    <div class="col-lg-4">
+      <div class="info-card">
+        <h4>Key principles</h4>
+        <ul class="list-unstyled feature-list compact">
+          <li><i class="bi bi-check-circle-fill text-success me-2"></i>Secure child records</li>
+          <li><i class="bi bi-check-circle-fill text-success me-2"></i>Parent-friendly reminders</li>
+          <li><i class="bi bi-check-circle-fill text-success me-2"></i>Health worker support</li>
+          <li><i class="bi bi-check-circle-fill text-success me-2"></i>Informational schedule only</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

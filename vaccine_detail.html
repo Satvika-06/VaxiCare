@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+{% block title %}{{ vaccine.name }} · Vaccine information{% endblock %}
+
+{% block content %}
+<section class="container py-5">
+  <div class="mb-4">
+    <a href="{{ url_for('main.vaccine_awareness') }}" class="small text-decoration-none">&larr; {{ 'వ్యాక్సిన్ అవగాహనకు తిరిగి వెళ్ళండి' if current_language == 'te' else 'Back to vaccine information' }}</a>
+    <div class="mt-3"><span class="eyebrow">{{ vaccine.category or ('టీకా సమాచారం' if current_language == 'te' else 'Vaccine information') }}</span></div>
+    <h1 class="mt-2">{{ vaccine.name }}</h1>
+    <p class="lead text-primary">{{ disease_display }}</p>
+    <span class="badge text-bg-warning">{{ guidance.review }}</span>
+  </div>
+
+  <div class="row g-4">
+    <div class="col-lg-7">
+      <div class="card-form h-100">
+        <h2 class="h4">{{ 'వ్యాధులు' if current_language == 'te' else 'Diseases this vaccine helps protect against' }}</h2>
+        <p>{{ disease_display }}</p>
+        <p class="small text-muted">{{ vaccine.description }} <span class="badge text-bg-light">{{ 'వైద్య సమీక్ష అవసరం' if current_language == 'te' else 'Catalogue description — review required' }}</span></p>
+        <h2 class="h4 mt-4">{{ 'ఎందుకు ముఖ్యమైనది' if current_language == 'te' else 'Why it is important' }}</h2>
+        <p>{{ guidance.importance }}</p>
+        <h2 class="h4 mt-4">{{ 'సాధారణ ప్రతిచర్యలు' if current_language == 'te' else 'Common expected side effects' }}</h2>
+        <p>{{ guidance.side_effects }}</p>
+        <h2 class="h4 mt-4">{{ 'ఎప్పుడు ఆరోగ్య నిపుణుడిని సంప్రదించాలి' if current_language == 'te' else 'When to contact a healthcare professional' }}</h2>
+        <p>{{ guidance.contact }}</p>
+      </div>
+    </div>
+    <div class="col-lg-5">
+      <div class="card-form mb-4">
+        <h2 class="h4">{{ 'సిఫార్సు చేసిన సమయం' if current_language == 'te' else 'Recommended age and dose timing' }}</h2>
+        <p><strong>{{ 'కాటలాగ్‌లో సూచించిన వయస్సు' if current_language == 'te' else 'Catalogue recommended age' }}:</strong> {{ vaccine.recommended_age }}</p>
+        <p><strong>{{ 'డోసుల సంఖ్య' if current_language == 'te' else 'Number of scheduled doses' }}:</strong> {{ schedule_entries|length }}</p>
+        {% if schedule_entries %}
+          <ul class="list-group list-group-flush">
+            {% for entry in schedule_entries %}
+              <li class="list-group-item px-0">
+                <strong>{{ ('పుట్టినప్పుడు' if entry.age_days == 0 else 'డోస్ ' ~ loop.index) if current_language == 'te' else entry.dose_label }}</strong>
+                <div class="small text-muted">{{ (entry.age_days|string ~ ' పుట్టిన తర్వాత రోజులు') if current_language == 'te' else (entry.description or (entry.age_days|string ~ ' days after birth')) }}</div>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="text-muted">{{ 'ఈ టీకాకు షెడ్యూల్ డోసులు అందుబాటులో లేవు.' if current_language == 'te' else 'No dose timing is currently configured in the application schedule.' }}</p>
+        {% endif %}
+        <p class="small text-muted mt-3"><strong>{{ 'మూలం' if current_language == 'te' else 'Reference' }}:</strong> {{ vaccine.source }} · {{ vaccine.source_checked_on }}</p>
+      </div>
+      <div class="card-form">
+        <h2 class="h4">{{ 'సన్నాహం మరియు తర్వాతి సంరక్షణ' if current_language == 'te' else 'Preparation and after-care' }}</h2>
+        <p>{{ guidance.care }}</p>
+        <div class="alert alert-info mb-0" role="note">
+          {{ 'ఈ సమాచారం విద్యాపరమైనది మాత్రమే. టీకా నిర్ణయాల కోసం అర్హత కలిగిన ఆరోగ్య నిపుణుడి సూచనలను అనుసరించండి.' if current_language == 'te' else 'Educational information only. Follow qualified healthcare guidance for vaccination decisions.' }}
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

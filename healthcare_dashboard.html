@@ -1,0 +1,93 @@
+{% extends 'base.html' %}
+{% block title %}{{ t('healthcare_title') }}{% endblock %}
+
+{% block content %}
+<section class="container py-5">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+      <span class="eyebrow">{{ t('healthcare_title') }}</span>
+      <h1 class="mb-1">Vaccination follow-up</h1>
+      <p class="text-muted mb-0">Prioritize children with due and upcoming doses.</p>
+    </div>
+  </div>
+
+  <div class="card-form mb-4">
+    <form method="GET" class="row g-3 align-items-end">
+      <div class="col-md-4">
+        <label class="form-label">Search by child name</label>
+        <input type="text" class="form-control" name="search" value="{{ search }}">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Search by village</label>
+        <input type="text" class="form-control" name="village" value="{{ village }}">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label" for="status">Vaccination status</label>
+        <select class="form-select" name="status" id="status">
+          <option value="">All actionable</option>
+          <option value="overdue" {% if status_filter == 'overdue' %}selected{% endif %}>Overdue</option>
+          <option value="due_today" {% if status_filter == 'due_today' %}selected{% endif %}>Due today</option>
+          <option value="upcoming" {% if status_filter == 'upcoming' %}selected{% endif %}>Upcoming</option>
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Due date range</label>
+        <div class="d-flex gap-2">
+          <input type="date" class="form-control" name="due_from" value="{{ due_from }}" aria-label="Due date from">
+          <input type="date" class="form-control" name="due_to" value="{{ due_to }}" aria-label="Due date to">
+        </div>
+      </div>
+      <div class="col-12">
+        <button class="btn btn-primary w-100" type="submit">Search</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="row g-3">
+    {% for row in child_rows %}
+      <div class="col-md-6 col-xl-4">
+        <div class="info-card h-100">
+          <div class="d-flex justify-content-between align-items-center">
+            <h2 class="h5 mb-0">{{ row.child.name }}</h2>
+            <span class="badge text-bg-info">{{ row.child.village }}</span>
+          </div>
+          <p class="small text-muted mt-2">DOB: {{ row.child.dob.strftime('%d %b %Y') }}</p>
+          <ul class="list-group list-group-flush mb-3">
+            {% for item in row['items'][:4] %}
+              <li class="list-group-item px-0 d-flex justify-content-between gap-2">
+                <div>
+                  <a href="{{ url_for('main.vaccine_information', vaccine_id=item.vaccine.id) }}" class="fw-semibold">{{ item.vaccine.name }}</a>
+                  <div class="small text-muted">{{ item.label }} · {{ item.due_date.strftime('%d %b %Y') }}</div>
+                </div>
+                <span class="badge align-self-start {% if item.status == 'overdue' %}text-bg-danger{% elif item.status == 'due_today' %}text-bg-warning{% else %}text-bg-primary{% endif %}">{{ item.status|replace('_', ' ')|title }}</span>
+              </li>
+            {% endfor %}
+          </ul>
+          {% if row.child.parent and row.child.parent.user and row.child.parent.user.sms_consent and row.child.parent.user.mobile %}
+            <p class="small text-muted"><i class="bi bi-telephone" aria-hidden="true"></i> Parent contact: <a href="tel:{{ row.child.parent.user.mobile }}">{{ row.child.parent.user.mobile }}</a></p>
+          {% endif %}
+          <div class="d-flex gap-2">
+            <a href="{{ url_for('main.health_record', child_id=row.child.id) }}" class="btn btn-sm btn-primary">Open record</a>
+            <a href="{{ url_for('main.child_detail', child_id=row.child.id) }}" class="btn btn-sm btn-outline-primary">Record vaccination</a>
+          </div>
+        </div>
+      </div>
+    {% endfor %}
+    {% if not child_rows %}
+      <div class="col-12"><div class="info-card text-center text-muted">No children match these follow-up filters.</div></div>
+    {% endif %}
+  </div>
+
+  {% if records %}
+    <div class="card-form mt-4">
+      <h2 class="h5">Recently recorded vaccinations</h2>
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <thead><tr><th>Child</th><th>Vaccine</th><th>Date given</th></tr></thead>
+          <tbody>{% for record in records %}<tr><td>{{ record.child.name }}</td><td>{{ record.vaccine.name }}</td><td>{{ record.administered_date.strftime('%d %b %Y') }}</td></tr>{% endfor %}</tbody>
+        </table>
+      </div>
+    </div>
+  {% endif %}
+</section>
+{% endblock %}
