@@ -174,6 +174,7 @@ class Notification(db.Model):
     body = db.Column(db.Text, nullable=False)
     channel = db.Column(db.String(30), default="sms", nullable=False)
     status = db.Column(db.String(30), default="queued", nullable=False)
+    is_read = db.Column(db.Boolean, default=False, nullable=False)
     sent_at = db.Column(db.DateTime, default=utcnow)
 
     user = db.relationship("User", back_populates="notifications")
@@ -317,6 +318,8 @@ class FCMDeviceToken(db.Model):
     token = db.Column(db.Text, nullable=False)
     token_hash = db.Column(db.String(64), unique=True, nullable=False)
     target_type = db.Column(db.String(20), default="registration_token", nullable=False)
+    device_name = db.Column(db.String(120), nullable=True)
+    permission_status = db.Column(db.String(30), default="granted", nullable=True)
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
     last_seen_at = db.Column(db.DateTime, default=utcnow, nullable=False)
@@ -398,3 +401,43 @@ class SmsTestRateLimitLock(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     lock_version = db.Column(db.Integer, default=0, nullable=False)
+
+
+class AndroidGatewayDevice(db.Model):
+    __tablename__ = "android_gateway_devices"
+
+    id = db.Column(db.Integer, primary_key=True)
+    device_name = db.Column(db.String(100), nullable=False)
+    device_identifier = db.Column(db.String(100), unique=True, nullable=False)
+    api_key_hash = db.Column(db.String(64), nullable=False)
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+    registered_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    last_ping_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+
+    registered_by = db.relationship("User")
+    messages = db.relationship("AndroidGatewayMessage", back_populates="assigned_device")
+
+
+class AndroidGatewayMessage(db.Model):
+    __tablename__ = "android_gateway_messages"
+
+    id = db.Column(db.Integer, primary_key=True)
+    message_uuid = db.Column(db.String(36), unique=True, nullable=False)
+    device_id = db.Column(db.Integer, db.ForeignKey("android_gateway_devices.id"), nullable=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    child_id = db.Column(db.Integer, db.ForeignKey("children.id"), nullable=True)
+    recipient_phone = db.Column(db.String(20), nullable=False)
+    message_text = db.Column(db.Text, nullable=False)
+    status = db.Column(db.String(20), default="queued", nullable=False)  # queued, assigned, sent, delivered, failed, cancelled
+    attempt_count = db.Column(db.Integer, default=0, nullable=False)
+    max_attempts = db.Column(db.Integer, default=3, nullable=False)
+    error_message = db.Column(db.String(255), nullable=True)
+    carrier_delivery_confirmed = db.Column(db.Boolean, default=False, nullable=False)
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+    assigned_at = db.Column(db.DateTime, nullable=True)
+    completed_at = db.Column(db.DateTime, nullable=True)
+
+    assigned_device = db.relationship("AndroidGatewayDevice", back_populates="messages")
+    user = db.relationship("User")
+    child = db.relationship("Child")

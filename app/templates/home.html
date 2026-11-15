@@ -1,59 +1,58 @@
 {% extends 'base.html' %}
 
-{% block title %}{{ t('site_name') }}{% endblock %}
+{% block title %}VaxiCare · Your Child's Vaccination Companion{% endblock %}
 
 {% block content %}
-<section class="hero-section">
-  <div class="container py-5">
+<!-- Healthcare Hero Section -->
+<section class="hero-healthcare">
+  <div class="container">
     <div class="row align-items-center gy-4">
       <div class="col-lg-7">
-        <span class="hero-badge">Community Health Tracking</span>
-        <h1 class="display-5 fw-bold mb-3">{{ t('hero_title') }}</h1>
-        <p class="lead text-muted">{{ t('hero_subtitle') }}</p>
-        <div class="d-flex gap-3 flex-wrap my-4">
-          <a class="btn btn-primary btn-lg" href="{{ url_for('main.parent_register') }}">{{ t('cta_register') }}</a>
-          <a class="btn btn-outline-primary btn-lg" href="{{ url_for('main.parent_login') }}">{{ t('cta_login') }}</a>
+        <span class="eyebrow"><i class="bi bi-shield-check me-1"></i> Child Health & Immunization Registry</span>
+        <h1 class="display-6 fw-bold mt-2 mb-3">VaxiCare – Your Child's Vaccination Companion</h1>
+        <p class="lead mb-4">
+          Never miss an essential dose. VaxiCare helps families and community healthcare workers track national immunization milestones, receive timely reminders, and maintain secure digital health records from birth through adolescence.
+        </p>
+        <div class="d-flex gap-3 flex-wrap mb-4">
+          <a class="btn btn-primary btn-lg" href="{{ url_for('main.parent_register') }}">
+            <i class="bi bi-person-plus-fill me-1"></i> Register as a Parent
+          </a>
+          <a class="btn btn-outline-primary btn-lg" href="{{ url_for('main.parent_login') }}">
+            <i class="bi bi-box-arrow-in-right me-1"></i> Parent Sign In
+          </a>
         </div>
-        <div class="row g-3">
-          <div class="col-md-3 col-6">
-            <div class="mini-stat">
-              <h4>1,250</h4>
-              <small>{{ t('stats_children') }}</small>
-            </div>
-          </div>
-          <div class="col-md-3 col-6">
-            <div class="mini-stat">
-              <h4>18</h4>
-              <small>{{ t('stats_vaccines') }}</small>
-            </div>
-          </div>
-          <div class="col-md-3 col-6">
-            <div class="mini-stat">
-              <h4>96%</h4>
-              <small>{{ t('stats_reminders') }}</small>
-            </div>
-          </div>
-          <div class="col-md-3 col-6">
-            <div class="mini-stat">
-              <h4>24</h4>
-              <small>{{ t('stats_workers') }}</small>
-            </div>
-          </div>
+        <div class="d-flex align-items-center gap-3 text-muted small">
+          <span><i class="bi bi-check2-circle text-success me-1"></i> Aligned with National UIP Schedule</span>
+          <span><i class="bi bi-lock-fill text-primary me-1"></i> Encrypted Health Records</span>
+          <span><i class="bi bi-bell-fill text-warning me-1"></i> Multi-Channel Reminders</span>
         </div>
       </div>
       <div class="col-lg-5">
-        <div class="hero-card">
-          <div class="card-top text-center">
-            <i class="bi bi-shield-check"></i>
+        <div class="card border-0 shadow-sm p-4 bg-white" style="border-radius: var(--radius-md); border-top: 4px solid var(--primary) !important;">
+          <h4 class="fw-bold mb-3"><i class="bi bi-heart-pulse-fill text-danger me-2"></i> Why Timely Vaccination Matters</h4>
+          <p class="small text-muted mb-3">
+            Vaccines are scientifically formulated to build immunity during critical early development windows. Administering doses on time protects against life-threatening diseases including Tuberculosis, Polio, Hepatitis B, Rotavirus, Diphtheria, and Measles.
+          </p>
+          <div class="p-3 bg-light rounded small mb-3">
+            <div class="d-flex align-items-start gap-2 mb-2">
+              <i class="bi bi-calendar-check-fill text-primary mt-1"></i>
+              <div>
+                <strong>Birth to 16 Years Protection</strong>
+                <div class="text-muted">Structured doses following the Universal Immunization Programme.</div>
+              </div>
+            </div>
+            <div class="d-flex align-items-start gap-2">
+              <i class="bi bi-qr-code-scan text-primary mt-1"></i>
+              <div>
+                <strong>Digital Vaccine Card with QR Verification</strong>
+                <div class="text-muted">Instantly verify and download clinical health cards anywhere.</div>
+              </div>
+            </div>
           </div>
-          <div class="card-body p-4">
-            <h3 class="mb-3">Immunization at a glance</h3>
-            <ul class="feature-list">
-              <li>Secure child records</li>
-              <li>Due-date tracking</li>
-              <li>SMS reminders and follow-up</li>
-              <li>Digital vaccination cards</li>
-            </ul>
+          <div class="text-center">
+            <a href="{{ url_for('main.vaccination_schedule') }}" class="btn btn-outline-secondary btn-sm w-100">
+              <i class="bi bi-calendar3 me-1"></i> Explore Full Vaccination Schedule
+            </a>
           </div>
         </div>
       </div>
@@ -61,46 +60,154 @@
   </div>
 </section>
 
-<section class="container py-5">
-  <div class="section-heading text-center mb-4">
-    <span class="eyebrow">{{ t('section_features') }}</span>
-    <h2>Built for parents, workers and public health teams</h2>
-  </div>
-  <div class="row g-4">
-    <div class="col-md-4">
-      <div class="info-card h-100">
-        <i class="bi bi-prescription2 feature-icon"></i>
-        <h4>Child vaccination management</h4>
-        <p>Track each child’s immunization schedule with due dates, completed doses and reminders.</p>
-      </div>
+<!-- How VaxiCare Works (3 Simple Steps) -->
+<section class="py-5" style="background-color: var(--bg-subtle);">
+  <div class="container">
+    <div class="text-center max-w-700 mx-auto mb-5">
+      <span class="eyebrow">Seamless Immunization Management</span>
+      <h2 class="fw-bold">How VaxiCare Works</h2>
+      <p class="text-muted">A clear, reliable workflow connecting parents with community healthcare workers.</p>
     </div>
-    <div class="col-md-4">
-      <div class="info-card h-100">
-        <i class="bi bi-people feature-icon"></i>
-        <h4>Healthcare follow-up</h4>
-        <p>Healthcare workers can quickly review children, search by village name, and log administered vaccines.</p>
+    <div class="row g-4">
+      <div class="col-md-4">
+        <div class="card h-100 border-0 shadow-xs p-4 bg-white">
+          <div class="feature-icon-wrapper mb-3">
+            <i class="bi bi-person-vcard"></i>
+          </div>
+          <h4 class="fw-bold mb-2">1. Register Child Profile</h4>
+          <p class="text-muted small mb-0">Add your child's date of birth and village. VaxiCare immediately generates an individualized 19-dose immunization schedule based on age milestones.</p>
+        </div>
       </div>
-    </div>
-    <div class="col-md-4">
-      <div class="info-card h-100">
-        <i class="bi bi-qr-code-scan feature-icon"></i>
-        <h4>Secure record access</h4>
-        <p>Each child gets a private QR-coded record link and downloadable vaccination card for easy sharing.</p>
+      <div class="col-md-4">
+        <div class="card h-100 border-0 shadow-xs p-4 bg-white">
+          <div class="feature-icon-wrapper mb-3">
+            <i class="bi bi-bell-fill"></i>
+          </div>
+          <h4 class="fw-bold mb-2">2. Receive Timely Reminders</h4>
+          <p class="text-muted small mb-0">Get proactive alerts before each dose becomes due via in-app alerts, browser push notifications, and optional SMS so you never miss an appointment.</p>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card h-100 border-0 shadow-xs p-4 bg-white">
+          <div class="feature-icon-wrapper mb-3">
+            <i class="bi bi-clipboard2-pulse"></i>
+          </div>
+          <h4 class="fw-bold mb-2">3. Verified Administration</h4>
+          <p class="text-muted small mb-0">Authorized healthcare workers record administered vaccines at the health centre. Your digital record updates instantly with downloadable PDF and QR verification.</p>
+        </div>
       </div>
     </div>
   </div>
 </section>
 
-<section class="section-cta">
-  <div class="container py-5">
-    <div class="row align-items-center">
+<!-- Features for Parents & Healthcare Workers -->
+<section class="py-5 bg-white">
+  <div class="container">
+    <div class="row g-5 align-items-center">
+      <div class="col-lg-6">
+        <span class="eyebrow">For Families</span>
+        <h2 class="fw-bold mb-3">Empowering Parents with Complete Visibility</h2>
+        <p class="text-muted mb-4">Managing your children's medical milestones shouldn't be stressful. VaxiCare keeps every date, dose, and clinic note organized in one secure place.</p>
+        <div class="d-flex flex-column gap-3">
+          <div class="d-flex gap-3">
+            <div class="feature-icon-wrapper flex-shrink-0" style="width: 38px; height: 38px; font-size: 1.1rem;">
+              <i class="bi bi-clock-history"></i>
+            </div>
+            <div>
+              <h5 class="fw-bold mb-1">Clear Timeline & Overdue Alerts</h5>
+              <p class="text-muted small mb-0">Upcoming doses highlighted with due dates; overdue doses flagged in red to ensure immediate clinical catch-up.</p>
+            </div>
+          </div>
+          <div class="d-flex gap-3">
+            <div class="feature-icon-wrapper flex-shrink-0" style="width: 38px; height: 38px; font-size: 1.1rem;">
+              <i class="bi bi-file-earmark-pdf"></i>
+            </div>
+            <div>
+              <h5 class="fw-bold mb-1">Official Digital Health Card</h5>
+              <p class="text-muted small mb-0">Download printable PDF cards required for school admissions, international travel, or doctor visits.</p>
+            </div>
+          </div>
+          <div class="d-flex gap-3">
+            <div class="feature-icon-wrapper flex-shrink-0" style="width: 38px; height: 38px; font-size: 1.1rem;">
+              <i class="bi bi-translate"></i>
+            </div>
+            <div>
+              <h5 class="fw-bold mb-1">Bilingual Support (English & Telugu)</h5>
+              <p class="text-muted small mb-0">Switch between English and Telugu at any time for comfortable native language access.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-6">
+        <span class="eyebrow">For Healthcare Teams</span>
+        <h2 class="fw-bold mb-3">Equipping Primary Health Centres & Field Workers</h2>
+        <p class="text-muted mb-4">Dedicated clinical tools designed for Auxiliary Nurse Midwives (ANMs), Accredited Social Health Activists (ASHAs), and medical officers.</p>
+        <div class="d-flex flex-column gap-3">
+          <div class="d-flex gap-3">
+            <div class="feature-icon-wrapper flex-shrink-0" style="width: 38px; height: 38px; font-size: 1.1rem;">
+              <i class="bi bi-geo-alt"></i>
+            </div>
+            <div>
+              <h5 class="fw-bold mb-1">Jurisdiction & Village Rosters</h5>
+              <p class="text-muted small mb-0">Healthcare staff automatically access children residing in their assigned village jurisdiction with instant search.</p>
+            </div>
+          </div>
+          <div class="d-flex gap-3">
+            <div class="feature-icon-wrapper flex-shrink-0" style="width: 38px; height: 38px; font-size: 1.1rem;">
+              <i class="bi bi-shield-lock"></i>
+            </div>
+            <div>
+              <h5 class="fw-bold mb-1">Clinical Safeguards & Duplicate Prevention</h5>
+              <p class="text-muted small mb-0">Validation prevents administration dates in the future or prior to birth, and guards against duplicate dose recording.</p>
+            </div>
+          </div>
+          <div class="d-flex gap-3">
+            <div class="feature-icon-wrapper flex-shrink-0" style="width: 38px; height: 38px; font-size: 1.1rem;">
+              <i class="bi bi-download"></i>
+            </div>
+            <div>
+              <h5 class="fw-bold mb-1">One-Click CSV Registry Export</h5>
+              <p class="text-muted small mb-0">Export clinical administration records for government audits, district reviews, and offline reporting.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Privacy, Security & Data Governance -->
+<section class="py-5" style="background-color: var(--bg-subtle);">
+  <div class="container">
+    <div class="row align-items-center g-4">
       <div class="col-lg-8">
-        <h2>{{ t('section_about') }}</h2>
-        <p class="mb-0">VaxiCare helps communities reduce missed immunizations through structured reminders, accessible records and real-time health data support.</p>
+        <span class="eyebrow"><i class="bi bi-shield-fill-check me-1"></i> Data Protection</span>
+        <h3 class="fw-bold mb-2">Committed to Health Data Privacy & Security</h3>
+        <p class="text-muted mb-0">
+          VaxiCare strictly implements role-based access control (RBAC), CSRF protection, secure salted password hashing, and session hardening. Parents retain full control over their contact preferences and SMS reminders, while clinical records remain auditable and tamper-evident.
+        </p>
       </div>
       <div class="col-lg-4 text-lg-end">
-        <a href="{{ url_for('main.about') }}" class="btn btn-primary btn-lg">Learn more</a>
+        <a href="{{ url_for('main.about') }}" class="btn btn-outline-primary">
+          <i class="bi bi-info-circle me-1"></i> Learn More About VaxiCare
+        </a>
       </div>
+    </div>
+  </div>
+</section>
+
+<!-- Call to Action Banner -->
+<section class="py-5 bg-white border-top">
+  <div class="container text-center max-w-700 mx-auto">
+    <h3 class="fw-bold mb-3">Begin Tracking Your Child's Immunizations Today</h3>
+    <p class="text-muted mb-4">Set up your family's profile in under two minutes or sign in to check your upcoming schedule.</p>
+    <div class="d-flex justify-content-center gap-3 flex-wrap">
+      <a href="{{ url_for('main.parent_register') }}" class="btn btn-primary btn-lg">
+        <i class="bi bi-person-plus me-1"></i> Create Parent Account
+      </a>
+      <a href="{{ url_for('main.vaccine_awareness') }}" class="btn btn-outline-secondary btn-lg">
+        <i class="bi bi-book me-1"></i> Vaccine Information Guide
+      </a>
     </div>
   </div>
 </section>

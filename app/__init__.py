@@ -73,6 +73,19 @@ def create_app(test_config=None):
     app.config["SMS_MAX_ATTEMPTS"] = int(os.getenv("SMS_MAX_ATTEMPTS", "3"))
     app.config["SMS_RETRY_MINUTES"] = int(os.getenv("SMS_RETRY_MINUTES", "15"))
     app.config["SMS_FORCE_DEMO"] = os.getenv("SMS_FORCE_DEMO", "false").lower() == "true"
+    app.config["FCM_ENABLED"] = os.getenv("FCM_ENABLED", "false").lower() == "true"
+    app.config["FIREBASE_PROJECT_ID"] = os.getenv("FIREBASE_PROJECT_ID")
+    app.config["FIREBASE_SERVICE_ACCOUNT_PATH"] = os.getenv("FIREBASE_SERVICE_ACCOUNT_PATH") or os.getenv("FIREBASE_CREDENTIALS_PATH")
+    app.config["FIREBASE_VAPID_PUBLIC_KEY"] = os.getenv("FIREBASE_VAPID_PUBLIC_KEY") or os.getenv("FIREBASE_VAPID_KEY")
+    app.config["FIREBASE_API_KEY"] = os.getenv("FIREBASE_API_KEY", "")
+    app.config["FIREBASE_AUTH_DOMAIN"] = os.getenv("FIREBASE_AUTH_DOMAIN", "")
+    app.config["FIREBASE_STORAGE_BUCKET"] = os.getenv("FIREBASE_STORAGE_BUCKET", "")
+    app.config["FIREBASE_MESSAGING_SENDER_ID"] = os.getenv("FIREBASE_MESSAGING_SENDER_ID", "")
+    app.config["FIREBASE_APP_ID"] = os.getenv("FIREBASE_APP_ID", "")
+    app.config["ANDROID_SMS_GATEWAY_ENABLED"] = os.getenv("ANDROID_SMS_GATEWAY_ENABLED", "false").lower() == "true"
+    app.config["TWILIO_ACCOUNT_SID"] = os.getenv("TWILIO_ACCOUNT_SID")
+    app.config["TWILIO_AUTH_TOKEN"] = os.getenv("TWILIO_AUTH_TOKEN")
+    app.config["TWILIO_PHONE_NUMBER"] = os.getenv("TWILIO_PHONE_NUMBER")
     app.config["SEED_DEMO_DATA"] = os.getenv(
         "SEED_DEMO_DATA",
         "false" if environment == "production" else "true",
@@ -120,10 +133,21 @@ def create_app(test_config=None):
 
     @app.context_processor
     def inject_globals():
+        def get_unread_count():
+            try:
+                from flask_login import current_user
+                if current_user and current_user.is_authenticated:
+                    from app.models import Notification
+                    return Notification.query.filter_by(user_id=current_user.id, is_read=False).count()
+            except Exception:
+                pass
+            return 0
+
         return {
             "t": lambda key, **kwargs: get_translation(key, session.get("language", "en"), **kwargs),
             "current_language": session.get("language", "en"),
             "current_year": datetime.now(UTC).year,
+            "unread_count": get_unread_count,
         }
 
     with app.app_context():

@@ -447,6 +447,70 @@ def run_due_reminder_check(today=None):
                     elif sms_res.get("status") == "duplicate":
                         skipped_count += 1
 
+            # 3. In-App Notification (Parent Dashboard)
+            from app.models import Notification, FCMDeviceToken, FCMPushNotification
+            existing_inapp = Notification.query.filter_by(
+                user_id=user.id,
+                child_id=child.id,
+                vaccine_id=vaccine.id,
+                reminder_type=reminder_type,
+            ).first()
+            if not existing_inapp:
+                inapp_notif = Notification(
+                    user_id=user.id,
+                    child_id=child.id,
+                    vaccine_id=vaccine.id,
+                    reminder_type=reminder_type,
+                    title=f"Vaccine Reminder: {vaccine.name}",
+                    body=f"{sched.dose_label} of {vaccine.name} for {child.name} is {reminder_type.replace('_', ' ')} (Due: {due_date.strftime('%d %b %Y')}).",
+                    channel="system",
+                    status="sent",
+                    sent_at=utcnow(),
+                )
+                db.session.add(inapp_notif)
+                try:
+                    db.session.commit()
+                except Exception:
+                    db.session.rollback()
+
+            # 4. FCM Push Notifications for active parent devices
+            fcm_tokens = FCMDeviceToken.query.filter_by(user_id=user.id, is_active=True).all()
+            for dev_tok in fcm_tokens:
+                existing_fcm = FCMPushNotification.query.filter_by(
+                    device_token_id=dev_tok.id,
+                    child_id=child.id,
+                    schedule_id=sched.id,
+                    reminder_type=reminder_type,
+                    due_date=due_date,
+                ).first()
+                if not existing_fcm:
+                    send_fcm_push_notification(
+                        user=user,
+                        device_token=dev_tok,
+                        child=child,
+                        vaccine=vaccine,
+                        schedule=sched,
+                        reminder_type=reminder_type,
+                        due_date=due_date,
+                    )
+
+            # 5. Optional Android SIM SMS Gateway
+            if current_app.config.get("ANDROID_SMS_GATEWAY_ENABLED") and user.sms_consent and user.mobile:
+                from app.models import AndroidGatewayMessage
+                existing_gw = AndroidGatewayMessage.query.filter_by(
+                    user_id=user.id,
+                    child_id=child.id,
+                    recipient_phone=user.mobile,
+                ).first()
+                if not existing_gw:
+                    sms_body = build_sms_message("en", child.name, vaccine.name, due_date, reminder_type)
+                    queue_android_gateway_message(
+                        user=user,
+                        recipient_phone=user.mobile,
+                        message_text=sms_body,
+                        child=child,
+                    )
+
     state = SchedulerRunState.query.filter_by(name="vaccination_reminders").first()
     if not state:
         state = SchedulerRunState(name="vaccination_reminders")
@@ -466,8 +530,192 @@ def run_due_reminder_check(today=None):
     }
 
 
+def send_fcm_push_notification(user, device_token, child, vaccine, schedule, reminder_type, due_date):
+    from app.models import FCMPushNotification, db, utcnow
+
+    title = f"Vaccination Reminder: {vaccine.name}"
+    body = f"{schedule.dose_label} of {vaccine.name} for {child.name} is {reminder_type.replace('_', ' ')}."
+    deep_link = f"/child/{child.id}"
+
+    fcm_enabled = current_app.config.get("FCM_ENABLED", False)
+    cred_path = current_app.config.get("FIREBASE_SERVICE_ACCOUNT_PATH")
+
+    if not fcm_enabled or not cred_path or not os.path.exists(cred_path):
+        record = FCMPushNotification(
+            user_id=user.id,
+            device_token_id=device_token.id,
+            child_id=child.id,
+            vaccine_id=vaccine.id,
+            schedule_id=schedule.id,
+            due_date=due_date,
+            reminder_type=reminder_type,
+            status="simulated" if not fcm_enabled else "failed",
+            failure_reason="Firebase credentials not configured on server." if not (cred_path and os.path.exists(cred_path)) else "FCM is disabled.",
+            created_at=utcnow(),
+            completed_at=utcnow(),
+        )
+        db.session.add(record)
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+        return {"status": record.status, "message": record.failure_reason}
+
+    try:
+        import firebase_admin
+        from firebase_admin import credentials, messaging
+
+        if not firebase_admin._apps:
+            cred = credentials.Certificate(cred_path)
+            project_id = current_app.config.get("FIREBASE_PROJECT_ID")
+            firebase_admin.initialize_app(cred, {"projectId": project_id} if project_id else None)
+
+        message = messaging.Message(
+            notification=messaging.Notification(title=title, body=body),
+            data={
+                "child_id": str(child.id),
+                "vaccine_id": str(vaccine.id),
+                "url": deep_link,
+                "click_action": deep_link,
+            },
+            token=device_token.token,
+        )
+        response_id = messaging.send(message)
+
+        record = FCMPushNotification(
+            user_id=user.id,
+            device_token_id=device_token.id,
+            child_id=child.id,
+            vaccine_id=vaccine.id,
+            schedule_id=schedule.id,
+            due_date=due_date,
+            reminder_type=reminder_type,
+            status="sent",
+            provider_message_id=str(response_id),
+            created_at=utcnow(),
+            completed_at=utcnow(),
+        )
+        db.session.add(record)
+        db.session.commit()
+        return {"status": "sent", "message_id": response_id}
+
+    except Exception as exc:
+        err_str = str(exc)
+        if "Unregistered" in err_str or "invalid" in err_str.lower() or "not registered" in err_str.lower():
+            device_token.is_active = False
+            failure_reason = "Device token is expired or unregistered."
+        else:
+            failure_reason = f"FCM delivery error: {err_str[:180]}"
+
+        record = FCMPushNotification(
+            user_id=user.id,
+            device_token_id=device_token.id,
+            child_id=child.id,
+            vaccine_id=vaccine.id,
+            schedule_id=schedule.id,
+            due_date=due_date,
+            reminder_type=reminder_type,
+            status="failed",
+            failure_reason=failure_reason,
+            created_at=utcnow(),
+            completed_at=utcnow(),
+        )
+        db.session.add(record)
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+        return {"status": "failed", "message": failure_reason}
+
+
+def send_test_fcm_notification(user, device_token):
+    from app.models import FCMPushTestAttempt, db, utcnow
+
+    title = "VaxiCare Test Push Notification"
+    body = "Your browser is successfully connected to VaxiCare vaccination push alerts."
+    deep_link = "/parent-dashboard"
+
+    fcm_enabled = current_app.config.get("FCM_ENABLED", False)
+    cred_path = current_app.config.get("FIREBASE_SERVICE_ACCOUNT_PATH")
+
+    if not fcm_enabled or not cred_path or not os.path.exists(cred_path):
+        attempt = FCMPushTestAttempt(
+            user_id=user.id,
+            device_id=device_token.id,
+            status="simulated",
+            failure_reason="Firebase credentials not configured; test simulated.",
+            created_at=utcnow(),
+            completed_at=utcnow(),
+        )
+        db.session.add(attempt)
+        db.session.commit()
+        return {"status": "simulated", "message": "Demo mode: FCM credentials not active."}
+
+    try:
+        import firebase_admin
+        from firebase_admin import credentials, messaging
+
+        if not firebase_admin._apps:
+            cred = credentials.Certificate(cred_path)
+            project_id = current_app.config.get("FIREBASE_PROJECT_ID")
+            firebase_admin.initialize_app(cred, {"projectId": project_id} if project_id else None)
+
+        message = messaging.Message(
+            notification=messaging.Notification(title=title, body=body),
+            data={"url": deep_link},
+            token=device_token.token,
+        )
+        response_id = messaging.send(message)
+        attempt = FCMPushTestAttempt(
+            user_id=user.id,
+            device_id=device_token.id,
+            status="sent",
+            provider_message_id=str(response_id),
+            created_at=utcnow(),
+            completed_at=utcnow(),
+        )
+        db.session.add(attempt)
+        db.session.commit()
+        return {"status": "sent", "message_id": response_id}
+    except Exception as exc:
+        attempt = FCMPushTestAttempt(
+            user_id=user.id,
+            device_id=device_token.id,
+            status="failed",
+            failure_reason=f"FCM error: {str(exc)[:180]}",
+            created_at=utcnow(),
+            completed_at=utcnow(),
+        )
+        db.session.add(attempt)
+        db.session.commit()
+        return {"status": "failed", "message": str(exc)}
+
+
+def queue_android_gateway_message(user, recipient_phone, message_text, child=None):
+    from app.models import AndroidGatewayMessage, db, utcnow
+    import uuid as _uuid
+
+    msg_uuid = str(_uuid.uuid4())
+    msg = AndroidGatewayMessage(
+        message_uuid=msg_uuid,
+        user_id=user.id,
+        child_id=child.id if child else None,
+        recipient_phone=recipient_phone,
+        message_text=message_text,
+        status="queued",
+        created_at=utcnow(),
+    )
+    db.session.add(msg)
+    try:
+        db.session.commit()
+        return {"status": "queued", "uuid": msg_uuid}
+    except Exception as e:
+        db.session.rollback()
+        return {"status": "error", "message": str(e)}
+
+
 def retry_failed_notification(channel, notification_id):
-    from app.models import SmsNotification, EmailReminderNotification, db, utcnow
+    from app.models import SmsNotification, EmailReminderNotification, FCMPushNotification, AndroidGatewayMessage, db, utcnow
 
     if channel == "sms":
         notification = db.session.get(SmsNotification, notification_id)
@@ -502,5 +750,33 @@ def retry_failed_notification(channel, notification_id):
             notification.sent_at = utcnow()
         db.session.commit()
         return res
+    elif channel in {"push", "fcm"}:
+        notification = db.session.get(FCMPushNotification, notification_id)
+        if not notification:
+            return {"status": "error", "message": "Push notification not found."}
+        if notification.status not in {"failed", "simulated"}:
+            return {"status": "error", "message": f"Cannot retry notification with status '{notification.status}'."}
+        dev = notification.device_token
+        if not dev or not dev.is_active:
+            return {"status": "error", "message": "Associated device token is no longer active."}
+        res = send_fcm_push_notification(
+            user=notification.user,
+            device_token=dev,
+            child=notification.child,
+            vaccine=notification.vaccine,
+            schedule=notification.schedule,
+            reminder_type=notification.reminder_type,
+            due_date=notification.due_date,
+        )
+        return res
+    elif channel == "android_gateway":
+        msg = db.session.get(AndroidGatewayMessage, notification_id)
+        if not msg:
+            return {"status": "error", "message": "Gateway message not found."}
+        msg.status = "queued"
+        msg.assigned_at = None
+        msg.completed_at = None
+        db.session.commit()
+        return {"status": "queued", "message": "Message returned to pending queue."}
     else:
         return {"status": "error", "message": "Invalid notification channel."}

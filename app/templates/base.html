@@ -4,17 +4,34 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{% block title %}{{ t('site_name') }}{% endblock %}</title>
+    <!-- Brand Typography: Noto Sans -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,300..800;1,300..800&display=swap" rel="stylesheet">
+    <!-- Bootstrap 5 CSS & Icons -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
+    <!-- Healthcare Design System -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+    <!-- PWA Web App Manifest & Theme -->
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}" />
+    <meta name="theme-color" content="#006934" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="VaxiCare" />
+    {% block head_extra %}{% endblock %}
   </head>
   <body>
-    <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm sticky-top">
+    <!-- Skip to main content for accessibility -->
+    <a href="#main-content" class="skip-to-content">Skip to main content</a>
+
+    <!-- Top Navigation -->
+    <nav class="navbar navbar-expand-lg sticky-top" aria-label="Main Navigation">
       <div class="container">
-        <a class="navbar-brand fw-bold" href="{{ url_for('main.home') }}"><span class="brand-mark">V</span> {{ t('site_name') }}</a>
+        <a class="navbar-brand" href="{{ url_for('main.home') }}">
+          <span class="brand-mark" aria-hidden="true">V</span>
+          <span>{{ t('site_name') }}</span>
+        </a>
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false" aria-label="Toggle navigation">
           <span class="navbar-toggler-icon"></span>
         </button>
@@ -26,42 +43,78 @@
             <li class="nav-item"><a class="nav-link" href="{{ url_for('main.vaccination_schedule') }}">{{ t('nav_schedule') }}</a></li>
             <li class="nav-item"><a class="nav-link" href="{{ url_for('main.contact') }}">{{ t('nav_contact') }}</a></li>
           </ul>
-          <div class="d-flex align-items-center gap-2">
+          <div class="d-flex align-items-center flex-wrap gap-2">
+            <!-- Language Switcher -->
             <div class="dropdown">
-              <button class="btn btn-outline-primary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">{{ t('language_switch') }}</button>
-              <ul class="dropdown-menu">
-                <li><a class="dropdown-item" href="{{ url_for('main.set_language', lang='en') }}">{{ t('english') }}</a></li>
-                <li><a class="dropdown-item" href="{{ url_for('main.set_language', lang='te') }}">{{ t('telugu') }}</a></li>
+              <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Select Language">
+                <i class="bi bi-translate" aria-hidden="true"></i> {{ t('language_switch') }}
+              </button>
+              <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                <li><a class="dropdown-item {% if current_language == 'en' %}active{% endif %}" href="{{ url_for('main.set_language', lang='en') }}">{{ t('english') }} (EN)</a></li>
+                <li><a class="dropdown-item {% if current_language == 'te' %}active{% endif %}" href="{{ url_for('main.set_language', lang='te') }}">{{ t('telugu') }} (TE)</a></li>
               </ul>
             </div>
+
             {% if current_user and current_user.is_authenticated %}
               {% if current_user.role == 'parent' %}
-                <a class="btn btn-outline-primary btn-sm" href="{{ url_for('main.parent_dashboard') }}">{{ t('nav_dashboard') }}</a>
-                <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('main.reminders') }}">{{ t('nav_reminders') }}</a>
+                <a class="btn btn-outline-primary btn-sm" href="{{ url_for('main.parent_dashboard') }}">
+                  <i class="bi bi-speedometer2" aria-hidden="true"></i> {{ t('nav_dashboard') }}
+                </a>
+                <a class="btn btn-outline-secondary btn-sm position-relative" href="{{ url_for('main.parent_notifications') }}" title="In-App Notifications">
+                  <i class="bi bi-bell" aria-hidden="true"></i>
+                  {% set unread = unread_count() %}
+                  {% if unread > 0 %}
+                  <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="font-size: 0.65rem;">
+                    {{ unread if unread < 100 else '99+' }}
+                    <span class="visually-hidden">unread notifications</span>
+                  </span>
+                  {% endif %}
+                </a>
+                <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('main.reminders') }}">
+                  <i class="bi bi-calendar-check" aria-hidden="true"></i> {{ t('nav_reminders') }}
+                </a>
               {% elif current_user.role == 'healthcare_worker' %}
-                <a class="btn btn-outline-primary btn-sm" href="{{ url_for('main.healthcare_dashboard') }}">{{ t('nav_dashboard') }}</a>
-                <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('main.worker_records') }}">Records</a>
-                <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('main.worker_profile') }}">Profile</a>
+                <a class="btn btn-outline-primary btn-sm" href="{{ url_for('main.healthcare_dashboard') }}">
+                  <i class="bi bi-hospital" aria-hidden="true"></i> {{ t('nav_dashboard') }}
+                </a>
+                <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('main.worker_records') }}">
+                  <i class="bi bi-journal-medical" aria-hidden="true"></i> Records
+                </a>
+                <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('main.worker_profile') }}">
+                  <i class="bi bi-person-badge" aria-hidden="true"></i> Profile
+                </a>
               {% elif current_user.role == 'admin' %}
-                <a class="btn btn-outline-primary btn-sm" href="{{ url_for('main.admin_dashboard') }}">{{ t('nav_dashboard') }}</a>
+                <a class="btn btn-outline-primary btn-sm" href="{{ url_for('main.admin_dashboard') }}">
+                  <i class="bi bi-shield-check" aria-hidden="true"></i> {{ t('nav_dashboard') }}
+                </a>
                 <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('main.admin_users') }}">Users</a>
-                <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('main.admin_workers') }}">Monitoring</a>
+                <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('main.admin_workers') }}">Workers</a>
                 <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('main.admin_vaccines') }}">Vaccines</a>
                 <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('main.admin_notifications') }}">Notifications</a>
               {% endif %}
-              <a class="btn btn-link btn-sm" href="{{ url_for('main.change_password') }}">Change password</a>
-              <form method="POST" action="{{ url_for('main.logout') }}" class="m-0">
+              <a class="btn btn-link btn-sm text-decoration-none" href="{{ url_for('main.change_password') }}">
+                <i class="bi bi-key" aria-hidden="true"></i> Password
+              </a>
+              <form method="POST" action="{{ url_for('main.logout') }}" class="m-0 d-inline">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button class="btn btn-primary btn-sm" type="submit">{{ t('nav_logout') }}</button>
+                <button class="btn btn-primary btn-sm" type="submit">
+                  <i class="bi bi-box-arrow-right" aria-hidden="true"></i> {{ t('nav_logout') }}
+                </button>
               </form>
             {% else %}
-              <a class="btn btn-primary btn-sm" href="{{ url_for('main.parent_login') }}">{{ t('nav_login') }}</a>
-              <a class="btn btn-outline-primary btn-sm" href="{{ url_for('main.parent_register') }}">{{ t('nav_register') }}</a>
+              <a class="btn btn-primary btn-sm" href="{{ url_for('main.parent_login') }}">
+                <i class="bi bi-box-arrow-in-right" aria-hidden="true"></i> {{ t('nav_login') }}
+              </a>
+              <a class="btn btn-outline-primary btn-sm" href="{{ url_for('main.parent_register') }}">
+                <i class="bi bi-person-plus" aria-hidden="true"></i> {{ t('nav_register') }}
+              </a>
               <div class="dropdown">
-                <button class="btn btn-link btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">Staff</button>
-                <ul class="dropdown-menu dropdown-menu-end">
-                  <li><a class="dropdown-item" href="{{ url_for('main.healthcare_login') }}">Healthcare worker sign in</a></li>
-                  <li><a class="dropdown-item" href="{{ url_for('main.admin_login') }}">Admin sign in</a></li>
+                <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                  Staff
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                  <li><a class="dropdown-item" href="{{ url_for('main.healthcare_login') }}"><i class="bi bi-heart-pulse me-2 text-success"></i> Healthcare Worker</a></li>
+                  <li><a class="dropdown-item" href="{{ url_for('main.admin_login') }}"><i class="bi bi-shield-lock me-2 text-danger"></i> System Administrator</a></li>
                 </ul>
               </div>
             {% endif %}
@@ -70,12 +123,15 @@
       </div>
     </nav>
 
-    <main>
+    <!-- Main Page Content -->
+    <main id="main-content" class="main-content">
+      <!-- Flash Messages -->
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
-          <div class="container mt-3">
+          <div class="container mt-3" aria-live="polite">
             {% for category, message in messages %}
-              <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+              <div class="alert alert-{{ category if category != 'error' else 'danger' }} alert-dismissible fade show shadow-sm" role="alert">
+                <i class="bi {% if category == 'success' %}bi-check-circle-fill text-success{% elif category in ['danger', 'error'] %}bi-exclamation-triangle-fill text-danger{% elif category == 'warning' %}bi-exclamation-circle-fill text-warning{% else %}bi-info-circle-fill text-info{% endif %} me-2" aria-hidden="true"></i>
                 {{ message }}
                 <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
               </div>
@@ -83,26 +139,109 @@
           </div>
         {% endif %}
       {% endwith %}
+
       {% block content %}{% endblock %}
     </main>
 
-    <footer class="footer mt-5">
-      <div class="container py-4">
-        <div class="row g-3">
-          <div class="col-md-6">
-            <h5>{{ t('site_name') }}</h5>
-            <p>{{ t('footer_copy') }}</p>
+    <!-- Toast Notification Container for Push / Dynamic Alerts -->
+    <div id="inapp-toast-container" class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 1090;"></div>
+
+    <!-- Healthcare Footer -->
+    <footer class="healthcare-footer">
+      <div class="container">
+        <div class="row g-4">
+          <div class="col-lg-5 col-md-6">
+            <h5 class="fw-bold mb-2">
+              <span class="brand-mark me-1" style="width: 24px; height: 24px; font-size: 0.85rem;" aria-hidden="true">V</span>
+              {{ t('site_name') }}
+            </h5>
+            <p class="text-muted small mb-3">{{ t('footer_copy') }}</p>
+            <p class="small text-muted mb-0">Designed for community health centres, healthcare workers, and parents to safeguard every child's immunization milestones.</p>
           </div>
-          <div class="col-md-6 text-md-end">
-            <a href="{{ url_for('main.contact') }}" class="text-decoration-none me-3">{{ t('nav_contact') }}</a>
-            <a href="{{ url_for('main.reminders') }}" class="text-decoration-none me-3">{{ t('nav_reminders') }}</a>
-            <a href="{{ url_for('main.vaccine_awareness') }}" class="text-decoration-none">{{ t('nav_awareness') }}</a>
+          <div class="col-lg-3 col-md-3 col-6">
+            <h6 class="fw-bold mb-3 text-uppercase text-muted" style="font-size: 0.8rem; letter-spacing: 0.05em;">Immunization</h6>
+            <ul class="list-unstyled small mb-0">
+              <li class="mb-2"><a href="{{ url_for('main.vaccination_schedule') }}">{{ t('nav_schedule') }}</a></li>
+              <li class="mb-2"><a href="{{ url_for('main.vaccine_awareness') }}">{{ t('nav_awareness') }}</a></li>
+              <li class="mb-2"><a href="{{ url_for('main.reminders') }}">{{ t('nav_reminders') }}</a></li>
+            </ul>
           </div>
+          <div class="col-lg-4 col-md-3 col-6 text-md-end">
+            <h6 class="fw-bold mb-3 text-uppercase text-muted" style="font-size: 0.8rem; letter-spacing: 0.05em;">Platform</h6>
+            <ul class="list-unstyled small mb-0">
+              <li class="mb-2"><a href="{{ url_for('main.about') }}">{{ t('nav_about') }}</a></li>
+              <li class="mb-2"><a href="{{ url_for('main.contact') }}">{{ t('nav_contact') }}</a></li>
+              <li class="mb-2"><span class="badge bg-light text-dark border">Universal Immunization Programme (UIP)</span></li>
+            </ul>
+          </div>
+        </div>
+        <hr class="my-3 text-muted" style="opacity: 0.15;" />
+        <div class="d-flex flex-wrap justify-content-between align-items-center small text-muted">
+          <span>&copy; {{ current_year }} {{ t('site_name') }}. All rights reserved.</span>
+          <span>Official Child Healthcare & Immunization Registry</span>
         </div>
       </div>
     </footer>
 
+    <!-- Bootstrap Bundle JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- Global Healthcare UI Scripts -->
+    <script>
+      // Password toggle utility
+      document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('[data-password-toggle]').forEach(function (button) {
+          button.addEventListener('click', function () {
+            var targetId = this.getAttribute('data-password-toggle');
+            var input = document.getElementById(targetId);
+            if (!input) return;
+            var isPassword = input.type === 'password';
+            input.type = isPassword ? 'text' : 'password';
+            this.setAttribute('aria-pressed', isPassword ? 'true' : 'false');
+            var icon = this.querySelector('i');
+            if (icon) {
+              icon.className = isPassword ? 'bi bi-eye-slash' : 'bi bi-eye';
+            }
+          });
+        });
+
+        // Form submission loading state handler
+        document.querySelectorAll('form:not([data-no-loading])').forEach(function (form) {
+          form.addEventListener('submit', function () {
+            var submitBtn = form.querySelector('button[type="submit"], input[type="submit"]');
+            if (submitBtn && !submitBtn.classList.contains('no-spin')) {
+              submitBtn.classList.add('is-loading');
+            }
+          });
+        });
+      });
+
+      // Accessible in-app toast utility
+      window.showInAppToast = function (title, body, type) {
+        var container = document.getElementById('inapp-toast-container');
+        if (!container) return;
+        var toastEl = document.createElement('div');
+        toastEl.className = 'toast show border-' + (type === 'error' ? 'danger' : 'primary');
+        toastEl.setAttribute('role', 'alert');
+        toastEl.setAttribute('aria-live', 'assertive');
+        toastEl.setAttribute('aria-atomic', 'true');
+        toastEl.innerHTML = `
+          <div class="toast-header">
+            <i class="bi bi-bell-fill text-primary me-2"></i>
+            <strong class="me-auto">${title}</strong>
+            <small class="text-muted">Just now</small>
+            <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+          </div>
+          <div class="toast-body">${body}</div>
+        `;
+        container.appendChild(toastEl);
+        setTimeout(function () {
+          toastEl.classList.remove('show');
+          setTimeout(function () { toastEl.remove(); }, 300);
+        }, 5000);
+      };
+    </script>
+
     {% block scripts %}{% endblock %}
   </body>
 </html>

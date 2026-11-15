@@ -4,7 +4,8 @@ services:
     env: python
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn --workers 2 --bind 0.0.0.0:$PORT run:app
+    startCommand: gunicorn -w 1 --threads 4 --bind 0.0.0.0:$PORT run:app
+    healthCheckPath: /health
     envVars:
       - key: SECRET_KEY
         generateValue: true
@@ -20,3 +21,5 @@ services:
         value: "false"
       - key: REMINDER_CHECK_INTERVAL_SECONDS
         value: "60"
+      - key: FCM_ENABLED
+        value: "false"

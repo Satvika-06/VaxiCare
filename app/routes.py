@@ -7,7 +7,10 @@ from datetime import date, datetime, timedelta
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
-from flask import Blueprint, abort, current_app, flash, redirect, render_template, request, send_file, session, url_for
+from flask import (
+    Blueprint, abort, current_app, flash, make_response, redirect,
+    render_template, request, send_file, send_from_directory, session, url_for
+)
 from flask_login import current_user, login_required, login_user, logout_user
 from sqlalchemy import func
 
@@ -50,6 +53,57 @@ def apply_security_headers(response):
     response.headers["X-Frame-Options"] = "SAMEORIGIN"
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
+
+
+# ---------------------------------------------------------------------------
+# Error Handlers
+# ---------------------------------------------------------------------------
+@main.app_errorhandler(403)
+def forbidden_error(error):
+    return render_template("403.html"), 403
+
+
+@main.app_errorhandler(404)
+def not_found_error(error):
+    return render_template("404.html"), 404
+
+
+@main.app_errorhandler(500)
+def internal_error(error):
+    try:
+        db.session.rollback()
+    except Exception:
+        pass
+    return render_template("500.html"), 500
+
+
+@main.route("/health")
+def health_check():
+    """Health check endpoint for Render, load balancers, and monitoring."""
+    db_ok = True
+    try:
+        db.session.execute(db.text("SELECT 1"))
+    except Exception as exc:
+        db_ok = False
+        current_app.logger.error("Health check DB probe failed: %s", exc)
+
+    status_code = 200 if db_ok else 503
+    return {
+        "status": "healthy" if db_ok else "degraded",
+        "service": "vaxicare",
+        "database": "connected" if db_ok else "unreachable",
+        "timestamp": utcnow().isoformat(),
+    }, status_code
+
+
+@main.route("/firebase-messaging-sw.js")
+def firebase_messaging_sw():
+    import os
+    static_dir = os.path.join(current_app.root_path, "static")
+    response = make_response(send_from_directory(static_dir, "firebase-messaging-sw.js"))
+    response.headers["Content-Type"] = "application/javascript"
+    response.headers["Service-Worker-Allowed"] = "/"
     return response
 
 
@@ -504,6 +558,31 @@ def parent_dashboard():
             user_id=current_user.id, status="pending"
         ).order_by(MobileVerificationChallenge.created_at.desc()).first()
 
+    # In-app notifications & FCM Web Push context
+    from app.models import Notification, FCMDeviceToken
+    recent_notifications = (
+        Notification.query.filter_by(user_id=current_user.id)
+        .order_by(Notification.sent_at.desc())
+        .limit(5)
+        .all()
+    )
+    unread_notification_count = Notification.query.filter_by(user_id=current_user.id, is_read=False).count()
+    registered_devices = (
+        FCMDeviceToken.query.filter_by(user_id=current_user.id, is_active=True)
+        .order_by(FCMDeviceToken.last_seen_at.desc())
+        .all()
+    )
+    fcm_available = bool(current_app.config.get("FCM_ENABLED", False))
+    fcm_vapid_key = current_app.config.get("FIREBASE_VAPID_PUBLIC_KEY") or ""
+    fcm_web_config = {
+        "apiKey": current_app.config.get("FIREBASE_API_KEY") or "",
+        "authDomain": current_app.config.get("FIREBASE_AUTH_DOMAIN") or "",
+        "projectId": current_app.config.get("FIREBASE_PROJECT_ID") or "",
+        "storageBucket": current_app.config.get("FIREBASE_STORAGE_BUCKET") or "",
+        "messagingSenderId": current_app.config.get("FIREBASE_MESSAGING_SENDER_ID") or "",
+        "appId": current_app.config.get("FIREBASE_APP_ID") or "",
+    }
+
     return render_template(
         "dashboard.html",
         children=children,
@@ -514,6 +593,13 @@ def parent_dashboard():
         mobile_otp_form=MobileOtpForm(),
         mobile_verification_available=sms_configured,
         mobile_verification_has_pending=pending_challenge is not None,
+        recent_notifications=recent_notifications,
+        unread_notification_count=unread_notification_count,
+        registered_devices=registered_devices,
+        fcm_available=fcm_available,
+        fcm_vapid_key=fcm_vapid_key,
+        fcm_web_config=fcm_web_config,
+        fcm_device_count=len(registered_devices),
     )
 
 
@@ -682,6 +768,52 @@ def parent_notifications():
         .all()
     )
     return render_template("parent_notifications.html", notifications=notifications)
+
+
+@main.route("/parent/notifications/<int:notification_id>/read", methods=["POST"])
+@login_required
+def mark_notification_read(notification_id):
+    if current_user.role != "parent":
+        abort(403)
+    notification = db.session.get(Notification, notification_id)
+    if not notification or notification.user_id != current_user.id:
+        abort(404)
+    notification.is_read = True
+    db.session.commit()
+    if request.is_json or "application/json" in request.headers.get("Accept", ""):
+        return {"status": "ok", "message": "Notification marked as read."}, 200
+    flash("Notification marked as read.", "success")
+    return redirect(request.referrer or url_for("main.parent_notifications"))
+
+
+@main.route("/parent/notifications/read-all", methods=["POST"])
+@login_required
+def mark_all_notifications_read():
+    if current_user.role != "parent":
+        abort(403)
+    Notification.query.filter_by(user_id=current_user.id, is_read=False).update({"is_read": True})
+    db.session.commit()
+    if request.is_json or "application/json" in request.headers.get("Accept", ""):
+        return {"status": "ok", "message": "All notifications marked as read."}, 200
+    flash("All notifications marked as read.", "success")
+    return redirect(request.referrer or url_for("main.parent_notifications"))
+
+
+@main.route("/parent/devices/<int:device_id>/revoke", methods=["POST"])
+@login_required
+def parent_revoke_device(device_id):
+    if current_user.role != "parent":
+        abort(403)
+    from app.models import FCMDeviceToken
+    device = db.session.get(FCMDeviceToken, device_id)
+    if not device or device.user_id != current_user.id:
+        abort(404)
+    device.is_active = False
+    db.session.commit()
+    if request.is_json or "application/json" in request.headers.get("Accept", ""):
+        return {"status": "ok", "message": "Device revoked successfully."}, 200
+    flash(f"Device '{device.device_name or 'Web Browser'}' was revoked.", "info")
+    return redirect(request.referrer or url_for("main.parent_dashboard"))
 
 
 # ---------------------------------------------------------------------------
@@ -919,25 +1051,30 @@ def verify_mobile_otp():
 
 
 # ---------------------------------------------------------------------------
-# FCM device push stubs (clear no-op with messages)
+# FCM device push endpoints & Android SIM Gateway API
 # ---------------------------------------------------------------------------
 @main.route("/register-push-device", methods=["POST"])
 @login_required
 def register_push_device():
     if current_user.role != "parent":
         abort(403)
-    # FCM registration is handled via JavaScript on the client side.
-    # Backend endpoint validates token and stores device registration.
-    token = (request.json or {}).get("token") if request.is_json else request.form.get("token")
+    data = request.get_json(silent=True) or request.form
+    token = data.get("token") or data.get("fid")
     if not token:
         return {"status": "error", "message": "No FCM token provided."}, 400
     from app.models import FCMDeviceToken
     import hashlib as _hl
     token_hash = _hl.sha256(token.encode()).hexdigest()
+    device_name = (data.get("device_name") or "").strip() or None
+    permission_status = (data.get("permission_status") or "granted").strip()
     existing = FCMDeviceToken.query.filter_by(user_id=current_user.id, token_hash=token_hash).first()
     if existing:
         existing.is_active = True
         existing.last_seen_at = utcnow()
+        if device_name:
+            existing.device_name = device_name
+        if permission_status:
+            existing.permission_status = permission_status
         db.session.commit()
         return {"status": "ok", "message": "Device token updated."}, 200
     device = FCMDeviceToken(
@@ -945,6 +1082,8 @@ def register_push_device():
         token=token,
         token_hash=token_hash,
         target_type="registration_token",
+        device_name=device_name or "Web Browser",
+        permission_status=permission_status,
         is_active=True,
         created_at=utcnow(),
         last_seen_at=utcnow(),
@@ -960,12 +1099,15 @@ def disable_push_device():
     if current_user.role != "parent":
         abort(403)
     from app.models import FCMDeviceToken
-    token = (request.json or {}).get("token") if request.is_json else request.form.get("token")
+    data = request.get_json(silent=True) or request.form
+    token = data.get("token") or data.get("fid")
     if token:
         import hashlib as _hl
         token_hash = _hl.sha256(token.encode()).hexdigest()
         FCMDeviceToken.query.filter_by(user_id=current_user.id, token_hash=token_hash).update({"is_active": False})
         db.session.commit()
+    if request.is_json:
+        return {"status": "ok", "message": "Push notifications disabled."}, 200
     flash("Push notifications disabled for this browser.", "info")
     return redirect(url_for("main.parent_dashboard"))
 
@@ -975,36 +1117,104 @@ def disable_push_device():
 def test_push_device():
     if current_user.role != "parent":
         abort(403)
+    from app.services import send_test_fcm_notification
     token_device = FCMDeviceToken.query.filter_by(user_id=current_user.id, is_active=True).first()
-    fcm_enabled = bool(current_app.config.get("FCM_SERVER_KEY") or current_app.config.get("FIREBASE_CREDENTIALS"))
     if not token_device:
+        if request.is_json:
+            return {"status": "error", "message": "No active registered browser device found. Enable push notifications first."}, 400
         flash("No active registered browser device found. Enable push notifications first.", "warning")
         return redirect(url_for("main.parent_dashboard"))
-    if not fcm_enabled:
-        attempt = FCMPushTestAttempt(
-            user_id=current_user.id,
-            device_id=token_device.id,
-            status="failed",
-            failure_reason="Push notifications are not configured on server (missing FCM credentials).",
-            created_at=utcnow(),
-            completed_at=utcnow(),
-        )
-        db.session.add(attempt)
-        db.session.commit()
-        flash("Push notification test failed: Server FCM configuration missing.", "warning")
-    else:
-        attempt = FCMPushTestAttempt(
-            user_id=current_user.id,
-            device_id=token_device.id,
-            status="sent",
-            provider_message_id="fcm-simulated-msg-id",
-            created_at=utcnow(),
-            completed_at=utcnow(),
-        )
-        db.session.add(attempt)
-        db.session.commit()
+
+    res = send_test_fcm_notification(current_user, token_device)
+    if request.is_json:
+        return res, 200 if res.get("status") in {"sent", "simulated"} else 400
+
+    if res.get("status") == "sent":
         flash("Test push notification sent to your browser.", "success")
+    elif res.get("status") == "simulated":
+        flash("Test push notification recorded (Demo mode: FCM credentials not active).", "info")
+    else:
+        flash(f"Test push notification failed: {res.get('message')}", "warning")
     return redirect(url_for("main.parent_dashboard"))
+
+
+def authenticate_gateway_device():
+    api_key = request.headers.get("X-Gateway-Key")
+    if not api_key:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            api_key = auth_header.split(" ", 1)[1]
+    if not api_key:
+        abort(401)
+    key_hash = hashlib.sha256(api_key.strip().encode("utf-8")).hexdigest()
+    from app.models import AndroidGatewayDevice
+    device = AndroidGatewayDevice.query.filter_by(api_key_hash=key_hash, is_active=True).first()
+    if not device:
+        abort(401)
+    device.last_ping_at = utcnow()
+    db.session.commit()
+    return device
+
+
+@main.route("/api/gateway/pending", methods=["GET"])
+def gateway_pending_messages():
+    device = authenticate_gateway_device()
+    from app.models import AndroidGatewayMessage
+    limit = min(int(request.args.get("limit", 10)), 50)
+    pending = (
+        AndroidGatewayMessage.query.filter_by(status="queued")
+        .order_by(AndroidGatewayMessage.created_at.asc())
+        .limit(limit)
+        .all()
+    )
+    results = []
+    for msg in pending:
+        msg.status = "assigned"
+        msg.device_id = device.id
+        msg.assigned_at = utcnow()
+        msg.attempt_count += 1
+        results.append({
+            "uuid": msg.message_uuid,
+            "recipient": msg.recipient_phone,
+            "text": msg.message_text,
+        })
+    db.session.commit()
+    return {
+        "status": "ok",
+        "device": device.device_name,
+        "count": len(results),
+        "messages": results,
+    }, 200
+
+
+@main.route("/api/gateway/status", methods=["POST"])
+def gateway_update_status():
+    device = authenticate_gateway_device()
+    data = request.get_json(silent=True) or request.form
+    msg_uuid = data.get("uuid")
+    new_status = data.get("status")
+    if not msg_uuid or new_status not in {"sent", "delivered", "failed", "cancelled"}:
+        return {"status": "error", "message": "Invalid message UUID or status."}, 400
+
+    from app.models import AndroidGatewayMessage
+    msg = AndroidGatewayMessage.query.filter_by(message_uuid=msg_uuid).first()
+    if not msg:
+        return {"status": "error", "message": "Message not found."}, 404
+
+    msg.status = new_status
+    msg.completed_at = utcnow()
+    if "error" in data:
+        msg.error_message = str(data.get("error"))[:250]
+    if data.get("delivery_confirmed"):
+        msg.carrier_delivery_confirmed = True
+    db.session.commit()
+    return {"status": "ok", "message": f"Status updated to '{new_status}'."}, 200
+
+
+@main.route("/api/gateway/heartbeat", methods=["POST"])
+def gateway_heartbeat():
+    device = authenticate_gateway_device()
+    return {"status": "ok", "device": device.device_name, "time": utcnow().isoformat()}, 200
 
 
 # ---------------------------------------------------------------------------
@@ -1744,12 +1954,14 @@ def admin_notifications():
     status_filter = request.args.get("status", "").strip().lower()
     search = request.args.get("search", "").strip()
 
-    allowed_channels = {"all", "sms", "email", "push"}
+    allowed_channels = {"all", "sms", "email", "push", "inapp", "android_gateway"}
     if channel_filter not in allowed_channels:
         abort(400)
-    allowed_statuses = {"", "sent", "failed", "pending", "simulated", "skipped", "disabled"}
+    allowed_statuses = {"", "sent", "failed", "pending", "queued", "assigned", "simulated", "skipped", "disabled", "delivered"}
     if status_filter and status_filter not in allowed_statuses:
         abort(400)
+
+    from app.models import AndroidGatewayDevice, AndroidGatewayMessage
 
     # 1. SMS Query
     sms_query = SmsNotification.query
@@ -1783,8 +1995,70 @@ def admin_notifications():
         )
     push_notifications = push_query.order_by(FCMPushNotification.created_at.desc()).limit(200).all()
 
+    # 4. In-App Notifications Query
+    inapp_query = Notification.query
+    if status_filter:
+        inapp_query = inapp_query.filter_by(status=status_filter)
+    if search:
+        inapp_query = inapp_query.join(Notification.child, isouter=True).filter(
+            (Notification.title.ilike(f"%{search}%")) |
+            (Child.name.ilike(f"%{search}%"))
+        )
+    inapp_notifications = inapp_query.order_by(Notification.sent_at.desc()).limit(200).all()
+
+    # 5. Android SIM Gateway Query
+    gateway_query = AndroidGatewayMessage.query
+    if status_filter:
+        gateway_query = gateway_query.filter_by(status=status_filter)
+    if search:
+        gateway_query = gateway_query.filter(
+            (AndroidGatewayMessage.recipient_phone.ilike(f"%{search}%")) |
+            (AndroidGatewayMessage.message_text.ilike(f"%{search}%"))
+        )
+    gateway_messages = gateway_query.order_by(AndroidGatewayMessage.created_at.desc()).limit(200).all()
+    gateway_devices = AndroidGatewayDevice.query.order_by(AndroidGatewayDevice.created_at.desc()).all()
+
     push_test_attempts = FCMPushTestAttempt.query.order_by(FCMPushTestAttempt.created_at.desc()).limit(100).all()
-    fcm_enabled = bool(current_app.config.get("FCM_SERVER_KEY") or current_app.config.get("FIREBASE_CREDENTIALS"))
+
+    # Provider status evaluations
+    fcm_enabled = current_app.config.get("FCM_ENABLED", False)
+    fcm_cred_path = current_app.config.get("FIREBASE_SERVICE_ACCOUNT_PATH")
+    fcm_status = "Active & Configured" if (fcm_enabled and fcm_cred_path and os.path.exists(fcm_cred_path)) else ("Disabled" if not fcm_enabled else "Credentials missing")
+
+    twilio_configured = bool(current_app.config.get("TWILIO_ACCOUNT_SID") and current_app.config.get("TWILIO_AUTH_TOKEN") and current_app.config.get("TWILIO_PHONE_NUMBER"))
+    sms_force_demo = current_app.config.get("SMS_FORCE_DEMO", False)
+    twilio_status = "Simulated (Demo Mode)" if sms_force_demo else ("Active" if twilio_configured else "Credentials missing")
+
+    smtp_configured = bool(current_app.config.get("SMTP_HOST") and (current_app.config.get("SMTP_FROM") or current_app.config.get("MAIL_DEFAULT_SENDER")))
+    smtp_status = "Active & Configured" if smtp_configured else "Credentials missing"
+
+    gateway_enabled = current_app.config.get("ANDROID_SMS_GATEWAY_ENABLED", False)
+    gateway_status = "Enabled" if gateway_enabled else "Disabled (Default)"
+
+    # Metric counts
+    total_queued = (
+        SmsNotification.query.filter_by(status="pending").count() +
+        AndroidGatewayMessage.query.filter(AndroidGatewayMessage.status.in_(["queued", "assigned"])).count()
+    )
+    total_sent = (
+        SmsNotification.query.filter_by(status="sent").count() +
+        EmailReminderNotification.query.filter_by(status="sent").count() +
+        FCMPushNotification.query.filter_by(status="sent").count() +
+        Notification.query.filter_by(status="sent").count() +
+        AndroidGatewayMessage.query.filter_by(status="sent").count()
+    )
+    total_failed = (
+        SmsNotification.query.filter_by(status="failed").count() +
+        EmailReminderNotification.query.filter_by(status="failed").count() +
+        FCMPushNotification.query.filter_by(status="failed").count() +
+        Notification.query.filter_by(status="failed").count() +
+        AndroidGatewayMessage.query.filter_by(status="failed").count()
+    )
+    total_simulated = (
+        SmsNotification.query.filter_by(status="simulated").count() +
+        EmailReminderNotification.query.filter_by(status="simulated").count() +
+        FCMPushNotification.query.filter_by(status="simulated").count()
+    )
 
     return render_template(
         "admin_notifications.html",
@@ -1792,11 +2066,68 @@ def admin_notifications():
         email_notifications=email_notifications,
         push_notifications=push_notifications,
         push_test_attempts=push_test_attempts,
-        fcm_enabled=fcm_enabled,
+        inapp_notifications=inapp_notifications,
+        gateway_messages=gateway_messages,
+        gateway_devices=gateway_devices,
         channel_filter=channel_filter,
         status_filter=status_filter,
         search=search,
+        fcm_status=fcm_status,
+        twilio_status=twilio_status,
+        smtp_status=smtp_status,
+        gateway_status=gateway_status,
+        total_queued=total_queued,
+        total_sent=total_sent,
+        total_failed=total_failed,
+        total_simulated=total_simulated,
     )
+
+
+@main.route("/admin/gateway-devices/register", methods=["POST"])
+@login_required
+def admin_register_gateway_device():
+    if current_user.role != "admin":
+        abort(403)
+    name = request.form.get("device_name", "").strip()
+    identifier = request.form.get("device_identifier", "").strip()
+    if not name or not identifier:
+        flash("Device name and hardware identifier are required.", "danger")
+        return redirect(url_for("main.admin_notifications", channel="android_gateway"))
+
+    from app.models import AndroidGatewayDevice
+    existing = AndroidGatewayDevice.query.filter_by(device_identifier=identifier).first()
+    if existing:
+        flash(f"A device with identifier '{identifier}' is already registered.", "warning")
+        return redirect(url_for("main.admin_notifications", channel="android_gateway"))
+
+    raw_key = secrets.token_hex(20)
+    key_hash = hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
+    dev = AndroidGatewayDevice(
+        device_name=name,
+        device_identifier=identifier,
+        api_key_hash=key_hash,
+        is_active=True,
+        registered_by_id=current_user.id,
+        created_at=utcnow(),
+    )
+    db.session.add(dev)
+    db.session.commit()
+    flash(f"Android Gateway Device '{name}' registered successfully! API Key: {raw_key} (Save this key now — it cannot be displayed again).", "success")
+    return redirect(url_for("main.admin_notifications", channel="android_gateway"))
+
+
+@main.route("/admin/gateway-devices/<int:device_id>/revoke", methods=["POST"])
+@login_required
+def admin_revoke_gateway_device(device_id):
+    if current_user.role != "admin":
+        abort(403)
+    from app.models import AndroidGatewayDevice
+    dev = db.session.get(AndroidGatewayDevice, device_id)
+    if dev:
+        dev.is_active = False
+        db.session.commit()
+        flash(f"Device '{dev.device_name}' has been revoked.", "info")
+    return redirect(url_for("main.admin_notifications", channel="android_gateway"))
 
 
 # ---------------------------------------------------------------------------

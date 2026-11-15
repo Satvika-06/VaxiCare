@@ -16,3 +16,5 @@ instance/
 firebase-credentials/
 firebasecredentials/
 **/serviceAccount*.json
+*.log
+*.sqlite

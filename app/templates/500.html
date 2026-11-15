@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+
+{% block title %}System Error (500) · VaxiCare{% endblock %}
+
+{% block content %}
+<div class="container py-5 text-center">
+  <div class="card border-0 shadow-sm p-5 mx-auto bg-white" style="border-radius: var(--radius-md); max-width: 540px;">
+    <div class="mb-3 text-warning" style="font-size: 3rem;">
+      <i class="bi bi-exclamation-octagon" aria-hidden="true"></i>
+    </div>
+    <span class="eyebrow mx-auto mb-2">Error 500 · Server Error</span>
+    <h2 class="fw-bold mb-2">Temporary System Issue</h2>
+    <p class="text-muted mb-4">
+      An unexpected error occurred while processing your request. Our clinical system administrators have been notified. Please try again shortly.
+    </p>
+    <div class="d-flex justify-content-center gap-2 flex-wrap">
+      <a href="{{ url_for('main.home') }}" class="btn btn-primary">
+        <i class="bi bi-house-door me-1"></i> Return Home
+      </a>
+      <a href="{{ url_for('main.contact') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-envelope me-1"></i> Contact Support
+      </a>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -33,6 +33,22 @@ def upgrade_existing_database():
         )
         db.session.commit()
 
+    # 1b. Notifications table migrations
+    if "notifications" in existing_tables:
+        notif_columns = {column["name"] for column in inspector.get_columns("notifications")}
+        if "is_read" not in notif_columns:
+            db.session.execute(text("ALTER TABLE notifications ADD COLUMN is_read BOOLEAN NOT NULL DEFAULT 0"))
+            db.session.commit()
+
+    # 1c. FCM device tokens table migrations
+    if "fcm_device_tokens" in existing_tables:
+        token_columns = {column["name"] for column in inspector.get_columns("fcm_device_tokens")}
+        if "device_name" not in token_columns:
+            db.session.execute(text("ALTER TABLE fcm_device_tokens ADD COLUMN device_name VARCHAR(120)"))
+        if "permission_status" not in token_columns:
+            db.session.execute(text("ALTER TABLE fcm_device_tokens ADD COLUMN permission_status VARCHAR(30) DEFAULT 'granted'"))
+        db.session.commit()
+
     # 2. Synchronize empty auxiliary tables if schema needs alignment
     empty_tables_to_sync = [
         "application_settings",
