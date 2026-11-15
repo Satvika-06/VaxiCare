@@ -3,19 +3,21 @@
    ========================================================================== */
 
 :root {
-  --primary: #0f766e;
-  --primary-hover: #115e59;
-  --primary-light: #ccfbf1;
-  --secondary: #0284c7;
+  --primary: #006934;
+  --primary-hover: #005027;
+  --primary-light: #e6f4ea;
+  --secondary: #0d6efd;
   --accent: #f59e0b;
-  --success: #10b981;
-  --danger: #ef4444;
-  --dark: #0f172a;
-  --light-bg: #f8fafc;
+  --success: #006934;
+  --danger: #E01829;
+  --dark: #000000;
+  --light-bg: #F2F2F8;
   --card-bg: #ffffff;
-  --border-color: #e2e8f0;
-  --text-main: #334155;
-  --text-muted: #64748b;
+  --border-color: #D1D5DB;
+  --border-subtle: #E5E7EB;
+  --text-main: #374151;
+  --text-dark: #000000;
+  --text-muted: #525252;
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
   --radius-sm: 6px;
@@ -24,7 +26,7 @@
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-family: 'Noto Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   color: var(--text-main);
   background-color: var(--light-bg);
   min-height: 100vh;

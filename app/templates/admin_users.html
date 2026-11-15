@@ -1,45 +1,157 @@
 {% extends 'base.html' %}
-{% block title %}User management · VaxiCare{% endblock %}
+{% block title %}User Management · VaxiCare{% endblock %}
 
 {% block content %}
 <section class="container py-5">
   <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
-    <div><span class="eyebrow">Administration</span><h1 class="mb-1">User management</h1><p class="text-muted mb-0">Create individual parent, healthcare-worker, and administrator accounts.</p></div>
-    <a href="{{ url_for('main.admin_dashboard') }}" class="btn btn-outline-primary">Back to dashboard</a>
-  </div>
-  <div class="row g-4">
-    <div class="col-lg-5">
-      <div class="card-form">
-        <h2 class="h4">Create account</h2>
-        <form method="POST">
-          {{ form.hidden_tag() }}
-          <div class="mb-3">{{ form.username.label(class_='form-label') }}{{ form.username(class_='form-control', autocomplete='off') }}</div>
-          <div class="mb-3">{{ form.email.label(class_='form-label') }}{{ form.email(class_='form-control') }}</div>
-          <div class="mb-3">{{ form.password.label(class_='form-label') }}{{ form.password(class_='form-control', autocomplete='new-password') }}</div>
-          <div class="mb-3">{{ form.role.label(class_='form-label') }}{{ form.role(class_='form-select') }}</div>
-          <div class="row">
-            <div class="col-md-6 mb-3">{{ form.first_name.label(class_='form-label') }}{{ form.first_name(class_='form-control') }}</div>
-            <div class="col-md-6 mb-3">{{ form.last_name.label(class_='form-label') }}{{ form.last_name(class_='form-control') }}</div>
-          </div>
-          {{ form.submit(class_='btn btn-primary') }}
-        </form>
-      </div>
+    <div>
+      <span class="eyebrow">Administration</span>
+      <h1 class="mb-1">User Management</h1>
+      <p class="text-muted mb-0">Search, filter, and manage parent, healthcare worker, and administrator accounts.</p>
     </div>
-    <div class="col-lg-7">
+    <div class="d-flex gap-2">
+      <a href="{{ url_for('main.admin_dashboard') }}" class="btn btn-outline-primary">Back to dashboard</a>
+      <a href="{{ url_for('main.admin_workers') }}" class="btn btn-outline-secondary">Worker monitoring</a>
+    </div>
+  </div>
+
+  <!-- Search and Role Filter Bar -->
+  <div class="card-form mb-4">
+    <form method="GET" class="row g-2 align-items-center">
+      <div class="col-md-5">
+        <div class="input-group">
+          <span class="input-group-text"><i class="bi bi-search"></i></span>
+          <input type="text" name="search" class="form-control" placeholder="Search by username, email, or name..." value="{{ search }}">
+        </div>
+      </div>
+      <div class="col-md-4">
+        <select name="role" class="form-select">
+          <option value="" {% if not role_filter %}selected{% endif %}>All Roles</option>
+          <option value="parent" {% if role_filter == 'parent' %}selected{% endif %}>Parents</option>
+          <option value="healthcare_worker" {% if role_filter == 'healthcare_worker' %}selected{% endif %}>Healthcare Workers</option>
+          <option value="admin" {% if role_filter == 'admin' %}selected{% endif %}>Administrators</option>
+        </select>
+      </div>
+      <div class="col-md-3 d-flex gap-2">
+        <button type="submit" class="btn btn-primary flex-grow-1">Filter</button>
+        {% if search or role_filter %}
+          <a href="{{ url_for('main.admin_users') }}" class="btn btn-outline-secondary">Clear</a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+
+  <div class="row g-4">
+    <!-- User list table -->
+    <div class="col-lg-8">
       <div class="card-form">
-        <h2 class="h4">Recent accounts</h2>
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h2 class="h4 mb-0">Registered Accounts</h2>
+          <span class="badge text-bg-light">{{ users|length }} matching</span>
+        </div>
         <div class="table-responsive">
           <table class="table table-hover align-middle">
-            <thead><tr><th>Username</th><th>Email</th><th>Role</th><th>Created</th></tr></thead>
+            <thead class="table-light">
+              <tr>
+                <th>User / Name</th>
+                <th>Role</th>
+                <th>Village / Assignment</th>
+                <th>Contact</th>
+                <th>Created</th>
+              </tr>
+            </thead>
             <tbody>
               {% for user in users %}
-                <tr><td>{{ user.username }}</td><td>{{ user.email }}</td><td><span class="badge text-bg-light">{{ user.role|replace('_', ' ')|title }}</span></td><td>{{ user.created_at.strftime('%d %b %Y') if user.created_at else '—' }}</td></tr>
+                <tr>
+                  <td>
+                    <strong>{{ user.username }}</strong>
+                    {% if user.id == current_user.id %}
+                      <span class="badge text-bg-primary ms-1">You (Current Admin)</span>
+                    {% endif %}
+                    <div class="small text-muted">
+                      {% if user.role == 'parent' and user.parent %}
+                        {{ user.parent.first_name }} {{ user.parent.last_name or '' }}
+                      {% elif user.role == 'healthcare_worker' and user.healthcare_worker %}
+                        {{ user.healthcare_worker.full_name }}
+                      {% else %}
+                        {{ user.full_name or '—' }}
+                      {% endif %}
+                    </div>
+                  </td>
+                  <td>
+                    {% if user.role == 'admin' %}
+                      <span class="badge text-bg-danger">Administrator</span>
+                    {% elif user.role == 'healthcare_worker' %}
+                      <span class="badge text-bg-success">Healthcare Worker</span>
+                    {% else %}
+                      <span class="badge text-bg-primary">Parent</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if user.role == 'parent' and user.parent %}
+                      {{ user.parent.village or 'Not set' }}
+                      <div class="small text-muted">{{ user.parent.children|length }} children</div>
+                    {% elif user.role == 'healthcare_worker' and user.healthcare_worker %}
+                      {{ user.healthcare_worker.village or 'Unassigned' }}
+                      <div class="small text-muted">{{ user.healthcare_worker.qualification or 'Community Staff' }}</div>
+                    {% else %}
+                      <span class="text-muted">Global / System</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    <div>{{ user.email }}</div>
+                    <div class="small text-muted">{{ user.mobile or 'No phone' }}</div>
+                  </td>
+                  <td class="small text-muted">
+                    {{ user.created_at.strftime('%d %b %Y') if user.created_at else '—' }}
+                  </td>
+                </tr>
               {% else %}
-                <tr><td colspan="4" class="text-muted">No users found.</td></tr>
+                <tr>
+                  <td colspan="5" class="text-center py-4 text-muted">No users found matching your criteria.</td>
+                </tr>
               {% endfor %}
             </tbody>
           </table>
         </div>
+      </div>
+    </div>
+
+    <!-- Create user form -->
+    <div class="col-lg-4">
+      <div class="card-form">
+        <h2 class="h4 mb-3">Create Account</h2>
+        <p class="small text-muted mb-3">Add a verified user with role-appropriate profile linkage.</p>
+        <form method="POST">
+          {{ form.hidden_tag() }}
+          <div class="mb-3">
+            {{ form.username.label(class_='form-label') }}
+            {{ form.username(class_='form-control', autocomplete='off', required=True) }}
+          </div>
+          <div class="mb-3">
+            {{ form.email.label(class_='form-label') }}
+            {{ form.email(class_='form-control', required=True) }}
+          </div>
+          <div class="mb-3">
+            {{ form.password.label(class_='form-label') }}
+            {{ form.password(class_='form-control', autocomplete='new-password', required=True) }}
+          </div>
+          <div class="mb-3">
+            {{ form.role.label(class_='form-label') }}
+            {{ form.role(class_='form-select') }}
+          </div>
+          <div class="row">
+            <div class="col-6 mb-3">
+              {{ form.first_name.label(class_='form-label') }}
+              {{ form.first_name(class_='form-control') }}
+            </div>
+            <div class="col-6 mb-3">
+              {{ form.last_name.label(class_='form-label') }}
+              {{ form.last_name(class_='form-control') }}
+            </div>
+          </div>
+          {{ form.submit(class_='btn btn-primary w-100') }}
+        </form>
       </div>
     </div>
   </div>

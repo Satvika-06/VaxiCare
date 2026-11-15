@@ -1,0 +1,166 @@
+{% extends 'base.html' %}
+{% block title %}My Profile — VaxiCare{% endblock %}
+
+{% block content %}
+<section class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-lg-9 col-xl-8">
+
+      {# ── Back Navigation ──────────────────────────────────────────────── #}
+      <a href="{{ url_for('main.parent_dashboard') }}" class="btn btn-link ps-0 mb-3 text-muted">
+        <i class="bi bi-arrow-left me-1"></i>Back to dashboard
+      </a>
+
+      {# ── Header ───────────────────────────────────────────────────────── #}
+      <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
+        <div>
+          <span class="eyebrow" style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--primary)">
+            Account Settings
+          </span>
+          <h1 class="h3 mb-1 mt-1">Parent Profile</h1>
+          <p class="text-muted mb-0">Manage your personal details, village location, and notification preferences.</p>
+        </div>
+        <div>
+          <a href="{{ url_for('main.change_password') }}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-key me-1"></i>Change password
+          </a>
+        </div>
+      </div>
+
+      {# ── Profile Card ─────────────────────────────────────────────────── #}
+      <div class="info-card mb-4">
+        <div class="d-flex align-items-center gap-3 p-2">
+          <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0"
+               style="width: 56px; height: 56px; background: var(--primary-light);">
+            <i class="bi bi-person-circle fs-2" style="color: var(--primary);"></i>
+          </div>
+          <div>
+            <h2 class="h5 mb-0">
+              {{ parent.first_name if parent else current_user.username }} {{ parent.last_name if parent and parent.last_name else '' }}
+            </h2>
+            <div class="small text-muted">
+              {{ current_user.email }} &middot;
+              <span class="badge bg-light text-dark border">Parent</span>
+              {% if current_user.mobile_verified %}
+                <span class="badge bg-success ms-1"><i class="bi bi-check2-circle me-1"></i>Phone Verified</span>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {# ── Main Form ─────────────────────────────────────────────────────── #}
+      <div class="info-card">
+        <form method="POST">
+          {{ form.hidden_tag() }}
+
+          {# Section 1: Personal Info #}
+          <div class="mb-4">
+            <h3 class="h6 text-uppercase fw-bold text-muted mb-3" style="letter-spacing: 0.5px;">
+              <i class="bi bi-person me-2"></i>Personal Information
+            </h3>
+            <div class="row g-3">
+              <div class="col-md-6">
+                {{ form.first_name.label(class_='form-label fw-semibold') }}
+                {{ form.first_name(class_='form-control' + (' is-invalid' if form.first_name.errors else ''), placeholder="First name") }}
+                {% for err in form.first_name.errors %}
+                  <div class="invalid-feedback">{{ err }}</div>
+                {% endfor %}
+              </div>
+              <div class="col-md-6">
+                {{ form.last_name.label(class_='form-label fw-semibold') }}
+                {{ form.last_name(class_='form-control' + (' is-invalid' if form.last_name.errors else ''), placeholder="Last name") }}
+                {% for err in form.last_name.errors %}
+                  <div class="invalid-feedback">{{ err }}</div>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+
+          <hr class="my-4" style="border-color: var(--border-color);">
+
+          {# Section 2: Contact & Phone Verification #}
+          <div class="mb-4">
+            <h3 class="h6 text-uppercase fw-bold text-muted mb-3" style="letter-spacing: 0.5px;">
+              <i class="bi bi-telephone me-2"></i>Contact &amp; Reminders
+            </h3>
+            <div class="row g-3">
+              <div class="col-md-6">
+                {{ form.mobile.label(class_='form-label fw-semibold') }}
+                <div class="input-group">
+                  {{ form.mobile(class_='form-control' + (' is-invalid' if form.mobile.errors else ''), placeholder="+91XXXXXXXXXX") }}
+                  <span class="input-group-text bg-light">
+                    {% if current_user.mobile_verified %}
+                      <span class="text-success small fw-semibold"><i class="bi bi-patch-check-fill me-1"></i>Verified</span>
+                    {% else %}
+                      <span class="text-muted small">Unverified</span>
+                    {% endif %}
+                  </span>
+                </div>
+                {% for err in form.mobile.errors %}
+                  <div class="invalid-feedback d-block">{{ err }}</div>
+                {% endfor %}
+                <div class="form-text">
+                  Mobile number for important vaccination SMS alerts. Phone verification is managed on your <a href="{{ url_for('main.parent_dashboard') }}">dashboard</a>.
+                </div>
+              </div>
+
+              <div class="col-md-6">
+                <label class="form-label fw-semibold">Account Email</label>
+                <input type="email" class="form-control bg-light" value="{{ current_user.email }}" readonly disabled>
+                <div class="form-text">Email address cannot be modified directly for security reasons.</div>
+              </div>
+
+              <div class="col-12 mt-3">
+                <div class="form-check p-3 rounded" style="background: #f8fafc; border: 1px solid var(--border-color);">
+                  {{ form.sms_consent(class_='form-check-input mt-1') }}
+                  {{ form.sms_consent.label(class_='form-check-label fw-semibold') }}
+                  <div class="small text-muted ms-4">
+                    Receive timely automated text reminders before upcoming vaccine due dates for your children.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <hr class="my-4" style="border-color: var(--border-color);">
+
+          {# Section 3: Location Details #}
+          <div class="mb-4">
+            <h3 class="h6 text-uppercase fw-bold text-muted mb-3" style="letter-spacing: 0.5px;">
+              <i class="bi bi-geo-alt me-2"></i>Location Details
+            </h3>
+            <div class="row g-3">
+              <div class="col-md-6">
+                {{ form.village.label(class_='form-label fw-semibold') }}
+                {{ form.village(class_='form-control' + (' is-invalid' if form.village.errors else ''), placeholder="Village or locality name") }}
+                {% for err in form.village.errors %}
+                  <div class="invalid-feedback">{{ err }}</div>
+                {% endfor %}
+                <div class="form-text">Assigned village helps local healthcare workers provide community outreach.</div>
+              </div>
+              <div class="col-md-6">
+                {{ form.address.label(class_='form-label fw-semibold') }}
+                {{ form.address(class_='form-control' + (' is-invalid' if form.address.errors else ''), placeholder="Door no., street, landmark") }}
+                {% for err in form.address.errors %}
+                  <div class="invalid-feedback">{{ err }}</div>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+
+          {# Form Actions #}
+          <div class="d-flex align-items-center gap-3 pt-3 border-top">
+            {{ form.submit(class_='btn btn-primary px-4') }}
+            <a href="{{ url_for('main.parent_dashboard') }}" class="btn btn-outline-secondary">
+              Cancel
+            </a>
+          </div>
+
+        </form>
+      </div>
+
+    </div>
+  </div>
+</section>
+{% endblock %}

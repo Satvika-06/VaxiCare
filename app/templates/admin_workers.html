@@ -1,0 +1,151 @@
+{% extends 'base.html' %}
+{% block title %}Healthcare Worker & Village Monitoring · VaxiCare{% endblock %}
+
+{% block content %}
+<section class="container py-5">
+  <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
+    <div>
+      <span class="eyebrow">Administration</span>
+      <h1 class="mb-1">Healthcare Worker & Village Monitoring</h1>
+      <p class="text-muted mb-0">Review healthcare worker village assignments, immunization delivery, and local coverage.</p>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="{{ url_for('main.admin_dashboard') }}" class="btn btn-outline-primary">Back to dashboard</a>
+      <a href="{{ url_for('main.admin_users') }}" class="btn btn-primary">Manage users</a>
+    </div>
+  </div>
+
+  <!-- Summary metrics -->
+  <div class="row g-3 mb-4">
+    <div class="col-sm-6 col-lg-4">
+      <div class="stat-box bg-primary-soft">
+        <span>Assigned healthcare workers</span>
+        <strong>{{ workers|length }}</strong>
+      </div>
+    </div>
+    <div class="col-sm-6 col-lg-4">
+      <div class="stat-box bg-success-soft">
+        <span>Monitored villages</span>
+        <strong>{{ village_stats|length }}</strong>
+      </div>
+    </div>
+    <div class="col-sm-6 col-lg-4">
+      <div class="stat-box bg-warning-soft">
+        <span>Total children across villages</span>
+        <strong>{{ village_stats|map(attribute='children_count')|sum }}</strong>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-4">
+    <!-- Healthcare workers table -->
+    <div class="col-lg-12">
+      <div class="card-form mb-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h2 class="h4 mb-0">Healthcare Worker Roster</h2>
+          <span class="badge text-bg-light">{{ workers|length }} Active Staff</span>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-hover align-middle">
+            <thead class="table-light">
+              <tr>
+                <th>Healthcare Worker</th>
+                <th>Contact info</th>
+                <th>Qualification / Dept</th>
+                <th>Assigned Village</th>
+                <th>Vaccinations Given</th>
+                <th>Reassign Village</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for w in workers %}
+                <tr>
+                  <td>
+                    <strong>{{ w.full_name }}</strong>
+                    <div class="small text-muted">@{{ w.user.username }}</div>
+                  </td>
+                  <td>
+                    <div>{{ w.user.email }}</div>
+                    <div class="small text-muted">{{ w.user.mobile or 'No phone' }}</div>
+                  </td>
+                  <td>
+                    <div>{{ w.qualification or 'Standard' }}</div>
+                    <div class="small text-muted">{{ w.department or 'Community Health' }}</div>
+                  </td>
+                  <td>
+                    {% if w.village %}
+                      <span class="badge bg-success-subtle text-success border border-success-subtle">{{ w.village }}</span>
+                    {% else %}
+                      <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">Unassigned (All)</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    <strong>{{ w.vaccination_records|length }}</strong> doses
+                  </td>
+                  <td>
+                    <form method="POST" action="{{ url_for('main.admin_reassign_worker', worker_id=w.id) }}" class="d-flex gap-2">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                      <input type="text" name="village" class="form-control form-control-sm" style="max-width: 140px;" placeholder="New village" value="{{ w.village or '' }}">
+                      <button type="submit" class="btn btn-sm btn-outline-primary">Save</button>
+                    </form>
+                  </td>
+                </tr>
+              {% else %}
+                <tr>
+                  <td colspan="6" class="text-center py-4 text-muted">No healthcare workers registered yet.</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Village coverage table -->
+      <div class="card-form">
+        <h2 class="h4 mb-3">Village Immunization Coverage</h2>
+        <div class="table-responsive">
+          <table class="table table-hover align-middle">
+            <thead class="table-light">
+              <tr>
+                <th>Village</th>
+                <th>Assigned Workers</th>
+                <th>Registered Children</th>
+                <th>Vaccinations Administered</th>
+                <th>Coverage Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for stat in village_stats %}
+                <tr>
+                  <td><strong>{{ stat.village }}</strong></td>
+                  <td>
+                    {% if stat.workers %}
+                      {{ stat.workers|join(', ') }}
+                    {% else %}
+                      <span class="text-warning">No dedicated worker assigned</span>
+                    {% endif %}
+                  </td>
+                  <td>{{ stat.children_count }}</td>
+                  <td>{{ stat.vaccination_count }}</td>
+                  <td>
+                    {% if stat.children_count > 0 %}
+                      {% set avg_dose = (stat.vaccination_count / stat.children_count)|round(1) %}
+                      <span class="badge bg-primary-subtle text-primary border border-primary-subtle">{{ avg_dose }} doses / child</span>
+                    {% else %}
+                      <span class="badge bg-secondary-subtle text-secondary">No children</span>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% else %}
+                <tr>
+                  <td colspan="5" class="text-center py-4 text-muted">No village data recorded yet.</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

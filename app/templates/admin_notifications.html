@@ -1,95 +1,285 @@
 {% extends 'base.html' %}
-{% block title %}Notification history · VaxiCare{% endblock %}
+{% block title %}Notification History · VaxiCare{% endblock %}
 
 {% block content %}
 <section class="container py-5">
   <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
-    <div><span class="eyebrow">Administration</span><h1 class="mb-1">Notification history</h1><p class="text-muted mb-0">Sent indicates provider acceptance, not handset delivery.</p></div>
-    <a href="{{ url_for('main.admin_dashboard') }}" class="btn btn-outline-primary">Back to dashboard</a>
-  </div>
-  <form method="GET" class="row g-2 align-items-end mb-4">
-    <div class="col-sm-4">
-      <label class="form-label" for="status">Filter by status</label>
-      <select class="form-select" id="status" name="status">
-        <option value="">All statuses</option>
-        {% for status in ['sent', 'failed', 'pending', 'simulated', 'skipped', 'disabled'] %}
-          <option value="{{ status }}" {% if status_filter == status %}selected{% endif %}>{{ status|title }}</option>
-        {% endfor %}
-      </select>
+    <div>
+      <span class="eyebrow">Administration</span>
+      <h1 class="mb-1">Notification Monitoring Center</h1>
+      <p class="text-muted mb-0">Delivery audit log across SMS, Email, and Push notification channels.</p>
     </div>
-    <div class="col-sm-2"><button class="btn btn-primary" type="submit">Apply filter</button></div>
-  </form>
-  <div class="card-form mb-4" id="fcm-history">
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-      <div>
-        <h2 class="h4 mb-1">Browser push (FCM)</h2>
-        <p class="small text-muted mb-0">Parent device identifiers and credentials are never shown here.</p>
+    <div class="d-flex gap-2">
+      <a href="{{ url_for('main.admin_dashboard') }}" class="btn btn-outline-primary">Back to dashboard</a>
+    </div>
+  </div>
+
+  <!-- Filter bar -->
+  <form method="GET" class="card-form mb-4 p-3">
+    <div class="row g-2 align-items-end">
+      <div class="col-md-3">
+        <label class="form-label small text-muted" for="channel">Channel</label>
+        <select class="form-select form-select-sm" id="channel" name="channel">
+          <option value="all" {% if channel_filter == 'all' or not channel_filter %}selected{% endif %}>All Channels</option>
+          <option value="sms" {% if channel_filter == 'sms' %}selected{% endif %}>SMS Only</option>
+          <option value="email" {% if channel_filter == 'email' %}selected{% endif %}>Email Only</option>
+          <option value="push" {% if channel_filter == 'push' %}selected{% endif %}>Browser Push Only</option>
+        </select>
       </div>
-      <span class="small text-muted">Automatic FCM: {{ 'enabled' if fcm_enabled else 'disabled' }}</span>
-    </div>
-    <div class="table-responsive">
-      <table class="table table-hover align-middle">
-        <thead><tr><th>Logged (UTC)</th><th>Parent</th><th>Child / vaccine / dose</th><th>Due</th><th>Type</th><th>Status</th><th>Failure</th></tr></thead>
-        <tbody>
-          {% for item in push_notifications %}
-            <tr>
-              <td>{{ item.created_at.strftime('%d %b %Y %H:%M') }}</td>
-              <td>{{ item.user.email if item.user else '—' }}</td>
-              <td>{{ item.child.name if item.child else '—' }}{% if item.vaccine %}<div class="small text-muted">{{ item.vaccine.name }} / {{ item.schedule.dose_label if item.schedule else '—' }}</div>{% endif %}</td>
-              <td>{{ item.due_date.strftime('%d %b %Y') }}</td>
-              <td>{{ item.reminder_type|replace('_', ' ')|title }}</td>
-              <td><span class="badge {% if item.status == 'sent' %}text-bg-success{% elif item.status == 'failed' %}text-bg-danger{% else %}text-bg-warning{% endif %}">{{ item.status|title }}</span></td>
-              <td>{{ item.failure_reason or '—' }}</td>
-            </tr>
-          {% else %}
-            <tr><td colspan="7" class="text-center text-muted py-4">No browser push notifications found.</td></tr>
+      <div class="col-md-3">
+        <label class="form-label small text-muted" for="status">Status</label>
+        <select class="form-select form-select-sm" id="status" name="status">
+          <option value="" {% if not status_filter %}selected{% endif %}>All Statuses</option>
+          {% for st in ['sent', 'failed', 'pending', 'simulated', 'skipped'] %}
+            <option value="{{ st }}" {% if status_filter == st %}selected{% endif %}>{{ st|title }}</option>
           {% endfor %}
-        </tbody>
-      </table>
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label small text-muted" for="search">Search</label>
+        <input type="text" class="form-control form-control-sm" id="search" name="search" placeholder="Recipient email, phone, or child..." value="{{ search }}">
+      </div>
+      <div class="col-md-2 d-flex gap-2">
+        <button class="btn btn-primary btn-sm flex-grow-1" type="submit">Apply</button>
+        {% if channel_filter != 'all' or status_filter or search %}
+          <a href="{{ url_for('main.admin_notifications') }}" class="btn btn-outline-secondary btn-sm">Clear</a>
+        {% endif %}
+      </div>
     </div>
-  </div>
-  <div class="card-form mb-4" id="fcm-test-history">
-    <h2 class="h4">Own-browser push test history</h2>
-    <p class="small text-muted">Test sends are scoped to the signed-in parent’s own browser. Device identifiers are not displayed.</p>
-    <div class="table-responsive">
-      <table class="table table-hover align-middle">
-        <thead><tr><th>Logged (UTC)</th><th>Parent</th><th>Status</th><th>Failure</th></tr></thead>
-        <tbody>
-          {% for item in push_test_attempts %}
+  </form>
+
+  <!-- Email Reminders Log -->
+  {% if channel_filter in ['all', 'email'] %}
+    <div class="card-form mb-4">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+          <h2 class="h4 mb-1">Email Immunization Reminders</h2>
+          <p class="small text-muted mb-0">Delivery logs for automatic and manually triggered parent email notices.</p>
+        </div>
+        <span class="badge text-bg-light">{{ email_notifications|length }} logs</span>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle">
+          <thead class="table-light">
             <tr>
-              <td>{{ item.created_at.strftime('%d %b %Y %H:%M') }}</td>
-              <td>{{ item.user.email if item.user else '—' }}</td>
-              <td><span class="badge {% if item.status == 'sent' %}text-bg-success{% elif item.status == 'failed' %}text-bg-danger{% else %}text-bg-warning{% endif %}">{{ item.status|title }}</span></td>
-              <td>{{ item.failure_reason or '—' }}</td>
+              <th>Timestamp</th>
+              <th>Recipient</th>
+              <th>Child / Vaccine</th>
+              <th>Due Date</th>
+              <th>Type</th>
+              <th>Status</th>
+              <th>Reason / Detail</th>
+              <th>Action</th>
             </tr>
-          {% else %}
-            <tr><td colspan="4" class="text-center text-muted py-4">No browser push tests found.</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {% for item in email_notifications %}
+              <tr>
+                <td class="small">{{ item.created_at.strftime('%d %b %Y %H:%M') }}</td>
+                <td>
+                  <strong>{{ item.recipient }}</strong>
+                  <div class="small text-muted">
+                    {% if item.user and item.user.parent %}
+                      {{ item.user.parent.first_name }} {{ item.user.parent.last_name or '' }}
+                    {% else %}
+                      {{ item.user.username if item.user else 'Parent' }}
+                    {% endif %}
+                  </div>
+                </td>
+                <td>
+                  <div>{{ item.child.name if item.child else '—' }}</div>
+                  <div class="small text-muted">{{ item.vaccine.name if item.vaccine else '—' }} ({{ item.schedule.dose_label if item.schedule else 'Dose' }})</div>
+                </td>
+                <td class="small">{{ item.due_date.strftime('%d %b %Y') if item.due_date else '—' }}</td>
+                <td><span class="badge text-bg-light">{{ item.reminder_type|replace('_', ' ')|title }}</span></td>
+                <td>
+                  <span class="badge {% if item.status == 'sent' %}text-bg-success{% elif item.status == 'failed' %}text-bg-danger{% elif item.status == 'simulated' %}text-bg-info{% else %}text-bg-warning{% endif %}">
+                    {{ item.status|title }}
+                  </span>
+                </td>
+                <td class="small text-muted">
+                  {{ item.failure_reason or item.provider_response or '—' }}
+                </td>
+                <td>
+                  {% if item.status in ['failed', 'simulated'] %}
+                    <form method="POST" action="{{ url_for('main.admin_retry_notification', notification_id=item.id) }}" class="d-inline">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                      <input type="hidden" name="channel" value="email">
+                      <button type="submit" class="btn btn-sm btn-outline-primary py-0">Retry</button>
+                    </form>
+                  {% else %}
+                    <span class="text-muted small">—</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% else %}
+              <tr>
+                <td colspan="8" class="text-center py-4 text-muted">No email notifications recorded.</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
     </div>
-  </div>
-  <div class="card-form">
-    <div class="table-responsive">
-      <table class="table table-hover align-middle">
-        <thead><tr><th>Logged</th><th>Recipient</th><th>Child / vaccine</th><th>Due</th><th>Type</th><th>Status</th><th>Message / result</th></tr></thead>
-        <tbody>
-          {% for item in notifications %}
+  {% endif %}
+
+  <!-- SMS Notifications Log -->
+  {% if channel_filter in ['all', 'sms'] %}
+    <div class="card-form mb-4">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+          <h2 class="h4 mb-1">SMS Notifications</h2>
+          <p class="small text-muted mb-0">Delivery logs for automated and test SMS messages.</p>
+        </div>
+        <span class="badge text-bg-light">{{ notifications|length }} logs</span>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle">
+          <thead class="table-light">
             <tr>
-              <td>{{ item.created_at.strftime('%d %b %Y %H:%M') }}</td>
-              <td>{{ item.recipient }}</td>
-              <td>{{ item.child.name if item.child else 'Test message' }}{% if item.vaccine %}<div class="small text-muted">{{ item.vaccine.name }}</div>{% endif %}</td>
-              <td>{{ item.due_date.strftime('%d %b %Y') if item.due_date else '—' }}</td>
-              <td>{{ item.message_type|replace('_', ' ')|title }}</td>
-              <td><span class="badge {% if item.status == 'sent' %}text-bg-success{% elif item.status == 'failed' %}text-bg-danger{% elif item.status == 'simulated' %}text-bg-info{% elif item.status in ['skipped', 'disabled'] %}text-bg-secondary{% else %}text-bg-warning{% endif %}">{{ item.status|title }}</span></td>
-              <td class="notification-message">{{ item.message }}{% if item.failure_reason %}<div class="small text-danger mt-1">{{ item.failure_reason }}</div>{% endif %}{% if item.provider_message_id %}<div class="small text-muted">Provider ID: {{ item.provider_message_id }}</div>{% endif %}</td>
+              <th>Timestamp</th>
+              <th>Recipient</th>
+              <th>Child / Vaccine</th>
+              <th>Due Date</th>
+              <th>Type</th>
+              <th>Status</th>
+              <th>Provider Info / Result</th>
+              <th>Action</th>
             </tr>
-          {% else %}
-            <tr><td colspan="7" class="text-center text-muted py-4">No notifications found.</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {% for item in notifications %}
+              <tr>
+                <td class="small">{{ item.created_at.strftime('%d %b %Y %H:%M') }}</td>
+                <td><strong>{{ item.recipient }}</strong></td>
+                <td>
+                  <div>{{ item.child.name if item.child else 'Test Recipient' }}</div>
+                  {% if item.vaccine %}<div class="small text-muted">{{ item.vaccine.name }}</div>{% endif %}
+                </td>
+                <td class="small">{{ item.due_date.strftime('%d %b %Y') if item.due_date else '—' }}</td>
+                <td><span class="badge text-bg-light">{{ item.message_type|replace('_', ' ')|title }}</span></td>
+                <td>
+                  <span class="badge {% if item.status == 'sent' %}text-bg-success{% elif item.status == 'failed' %}text-bg-danger{% elif item.status == 'simulated' %}text-bg-info{% elif item.status in ['skipped', 'disabled'] %}text-bg-secondary{% else %}text-bg-warning{% endif %}">
+                    {{ item.status|title }}
+                  </span>
+                </td>
+                <td class="small">
+                  {% if item.failure_reason %}
+                    <span class="text-danger">{{ item.failure_reason }}</span>
+                  {% elif item.provider_message_id %}
+                    <span class="text-muted">SID: {{ item.provider_message_id }}</span>
+                  {% else %}
+                    <span class="text-muted">{{ item.message|truncate(50) }}</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if item.status in ['failed', 'pending', 'simulated'] %}
+                    <form method="POST" action="{{ url_for('main.admin_retry_notification', notification_id=item.id) }}" class="d-inline">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                      <input type="hidden" name="channel" value="sms">
+                      <button type="submit" class="btn btn-sm btn-outline-primary py-0">Retry</button>
+                    </form>
+                  {% else %}
+                    <span class="text-muted small">—</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% else %}
+              <tr>
+                <td colspan="8" class="text-center py-4 text-muted">No SMS notifications recorded.</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
     </div>
-  </div>
+  {% endif %}
+
+  <!-- Browser Push Log -->
+  {% if channel_filter in ['all', 'push'] %}
+    <div class="card-form mb-4" id="fcm-history">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+          <h2 class="h4 mb-1">Browser Push Notifications (FCM)</h2>
+          <p class="small text-muted mb-0">Push dispatch logs. Device identifiers are kept securely protected.</p>
+        </div>
+        <span class="badge text-bg-light">{{ push_notifications|length }} logs</span>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle">
+          <thead class="table-light">
+            <tr>
+              <th>Timestamp</th>
+              <th>Parent</th>
+              <th>Child / Vaccine</th>
+              <th>Due Date</th>
+              <th>Type</th>
+              <th>Status</th>
+              <th>Detail</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in push_notifications %}
+              <tr>
+                <td class="small">{{ item.created_at.strftime('%d %b %Y %H:%M') }}</td>
+                <td>{{ item.user.email if item.user else '—' }}</td>
+                <td>
+                  <div>{{ item.child.name if item.child else '—' }}</div>
+                  {% if item.vaccine %}<div class="small text-muted">{{ item.vaccine.name }}</div>{% endif %}
+                </td>
+                <td class="small">{{ item.due_date.strftime('%d %b %Y') if item.due_date else '—' }}</td>
+                <td><span class="badge text-bg-light">{{ item.reminder_type|replace('_', ' ')|title }}</span></td>
+                <td>
+                  <span class="badge {% if item.status == 'sent' %}text-bg-success{% elif item.status == 'failed' %}text-bg-danger{% else %}text-bg-warning{% endif %}">
+                    {{ item.status|title }}
+                  </span>
+                </td>
+                <td class="small text-muted">{{ item.failure_reason or '—' }}</td>
+              </tr>
+            {% else %}
+              <tr>
+                <td colspan="7" class="text-center py-4 text-muted">No browser push notifications found.</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Push test attempts -->
+    <div class="card-form mb-4" id="fcm-test-history">
+      <h2 class="h4 mb-3">Browser Push Test Attempts</h2>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle">
+          <thead class="table-light">
+            <tr>
+              <th>Timestamp</th>
+              <th>User</th>
+              <th>Status</th>
+              <th>Reason</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in push_test_attempts %}
+              <tr>
+                <td class="small">{{ item.created_at.strftime('%d %b %Y %H:%M') }}</td>
+                <td>{{ item.user.email if item.user else '—' }}</td>
+                <td>
+                  <span class="badge {% if item.status == 'sent' %}text-bg-success{% elif item.status == 'failed' %}text-bg-danger{% else %}text-bg-warning{% endif %}">
+                    {{ item.status|title }}
+                  </span>
+                </td>
+                <td class="small text-muted">{{ item.failure_reason or 'Provider test successful.' }}</td>
+              </tr>
+            {% else %}
+              <tr>
+                <td colspan="4" class="text-center py-4 text-muted">No browser push tests recorded.</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endif %}
 </section>
 {% endblock %}

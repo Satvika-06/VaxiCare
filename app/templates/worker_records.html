@@ -1,0 +1,143 @@
+{% extends 'base.html' %}
+{% block title %}Clinical Vaccination Records — VaxiCare{% endblock %}
+
+{% block content %}
+<section class="container py-4">
+
+  {# ── Header ─────────────────────────────────────────────────────────────── #}
+  <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
+    <div>
+      <a href="{{ url_for('main.healthcare_dashboard') }}" class="btn btn-link ps-0 text-muted mb-1 text-decoration-none">
+        <i class="bi bi-arrow-left me-1"></i>Back to Dashboard
+      </a>
+      <span class="d-block eyebrow" style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--primary)">
+        Clinical Documentation & Audits
+      </span>
+      <h1 class="h2 mb-0">Vaccination Records Registry</h1>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="{{ url_for('main.worker_export_records') }}" class="btn btn-outline-primary">
+        <i class="bi bi-filetype-csv me-1"></i>Export to CSV
+      </a>
+    </div>
+  </div>
+
+  {# ── Filters ─────────────────────────────────────────────────────────────── #}
+  <div class="info-card mb-4">
+    <form method="GET" class="row g-3 align-items-end">
+      <div class="col-md-3">
+        <label class="form-label small fw-semibold">Search Child</label>
+        <div class="input-group">
+          <span class="input-group-text"><i class="bi bi-search"></i></span>
+          <input type="text" class="form-control" name="search" value="{{ search }}" placeholder="Child name...">
+        </div>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label small fw-semibold">Vaccine</label>
+        <select class="form-select" name="vaccine_id">
+          <option value="">All Vaccines</option>
+          {% for v in vaccines %}
+          <option value="{{ v.id }}" {% if vaccine_id == v.id %}selected{% endif %}>{{ v.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small fw-semibold">Village / PHC</label>
+        <select class="form-select" name="village">
+          <option value="">All Villages</option>
+          {% for vil in villages %}
+          <option value="{{ vil }}" {% if village == vil %}selected{% endif %}>{{ vil }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label small fw-semibold">Administered Date Range</label>
+        <div class="d-flex gap-2">
+          <input type="date" class="form-control form-control-sm" name="date_from" value="{{ date_from }}" aria-label="From date">
+          <input type="date" class="form-control form-control-sm" name="date_to" value="{{ date_to }}" aria-label="To date">
+        </div>
+      </div>
+      <div class="col-md-1 d-flex gap-2">
+        <button class="btn btn-primary w-100" type="submit" title="Filter records">
+          <i class="bi bi-funnel-fill"></i>
+        </button>
+        {% if search or vaccine_id or village or date_from or date_to %}
+        <a href="{{ url_for('main.worker_records') }}" class="btn btn-outline-secondary" title="Reset filters">
+          <i class="bi bi-x-lg"></i>
+        </a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+
+  {# ── Records Table ──────────────────────────────────────────────────────── #}
+  <div class="info-card">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h2 class="h5 mb-0">Total Verified Records: {{ records|length }}</h2>
+      <span class="small text-muted">Showing authorized entries only</span>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>#</th>
+            <th>Child Name</th>
+            <th>Village</th>
+            <th>Vaccine</th>
+            <th>Dose</th>
+            <th>Administered Date</th>
+            <th>Recorded By</th>
+            <th>Status</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for record in records %}
+          <tr>
+            <td class="text-muted small">{{ record.id }}</td>
+            <td>
+              <a href="{{ url_for('main.health_record', child_id=record.child.id) }}" class="fw-semibold text-decoration-none">
+                {{ record.child.name }}
+              </a>
+              <div class="small text-muted">DOB: {{ record.child.dob.strftime('%d %b %Y') if record.child.dob else '—' }}</div>
+            </td>
+            <td><span class="badge text-bg-light border">{{ record.child.village }}</span></td>
+            <td>
+              <a href="{{ url_for('main.vaccine_information', vaccine_id=record.vaccine.id) }}" class="fw-semibold text-decoration-none">
+                {{ record.vaccine.name }}
+              </a>
+            </td>
+            <td>{{ record.schedule.dose_label if record.schedule else 'Dose' }}</td>
+            <td class="fw-semibold">{{ record.administered_date.strftime('%d %b %Y') }}</td>
+            <td class="small">
+              {% if record.recorded_by %}
+                {{ record.recorded_by.full_name }}
+              {% else %}
+                <span class="text-muted">Clinical Provider</span>
+              {% endif %}
+            </td>
+            <td>
+              <span class="badge text-bg-success">
+                <i class="bi bi-check2-circle me-1"></i>{{ record.dose_status|title }}
+              </span>
+            </td>
+            <td class="small text-muted">{{ record.notes or '—' }}</td>
+          </tr>
+          {% endfor %}
+
+          {% if not records %}
+          <tr>
+            <td colspan="9" class="text-center py-5 text-muted">
+              <i class="bi bi-folder-x fs-1 d-block mb-2 text-secondary"></i>
+              No clinical records match your query.
+            </td>
+          </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</section>
+{% endblock %}

@@ -1,346 +1,444 @@
 {% extends 'base.html' %}
-{% block title %}{{ t('admin_title') }}{% endblock %}
+{% block title %}{{ t('admin_title') }} · VaxiCare{% endblock %}
 
 {% block content %}
 <section class="container py-5">
+  <!-- Top header and quick navigation -->
   <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
-    <div><span class="eyebrow">{{ t('admin_title') }}</span><h1 class="mb-1">System overview</h1><p class="text-muted mb-0">Live totals from the VaxiCare database.</p></div>
-    <div class="d-flex gap-2">
-      <a href="{{ url_for('main.admin_users') }}" class="btn btn-outline-primary">Manage users</a>
-      <a href="{{ url_for('main.admin_notifications') }}" class="btn btn-primary">Notification history</a>
+    <div>
+      <span class="eyebrow">{{ t('admin_title') }}</span>
+      <h1 class="mb-1">Administrative Control Center</h1>
+      <p class="text-muted mb-0">Live healthcare metrics, user management, and immunization analytics.</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      <a href="{{ url_for('main.admin_users') }}" class="btn btn-outline-primary">
+        <i class="bi bi-people me-1"></i> Manage users
+      </a>
+      <a href="{{ url_for('main.admin_workers') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-geo-alt me-1"></i> Monitoring
+      </a>
+      <a href="{{ url_for('main.admin_vaccines') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-capsule me-1"></i> Vaccines
+      </a>
+      <a href="{{ url_for('main.admin_notifications') }}" class="btn btn-primary">
+        <i class="bi bi-bell me-1"></i> Notifications
+      </a>
+      <form method="POST" action="{{ url_for('main.admin_run_reminder_check') }}" class="d-inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-outline-success" title="Check and dispatch due and overdue reminders">
+          <i class="bi bi-arrow-repeat me-1"></i> Run Reminders Check
+        </button>
+      </form>
     </div>
   </div>
 
+  <!-- Primary Overview Cards (All 8 Required Metrics) -->
   <div class="row g-3 mb-4">
-    <div class="col-sm-6 col-xl-2">
-      <div class="stat-box bg-primary-soft"><span>Parents</span><strong>{{ parent_count }}</strong></div>
+    <div class="col-sm-6 col-md-3 col-xl-2">
+      <div class="stat-box bg-primary-soft">
+        <span>Total Users</span>
+        <strong>{{ total_users_count }}</strong>
+        <div class="small text-muted">{{ parent_count }} parents · {{ worker_count }} staff</div>
+      </div>
     </div>
-    <div class="col-sm-6 col-xl-2">
-      <div class="stat-box bg-success-soft"><span>Healthcare workers</span><strong>{{ worker_count }}</strong></div>
+    <div class="col-sm-6 col-md-3 col-xl-2">
+      <div class="stat-box bg-success-soft">
+        <span>Children</span>
+        <strong>{{ child_count }}</strong>
+        <div class="small text-muted">Registered in care</div>
+      </div>
     </div>
-    <div class="col-sm-6 col-xl-2">
-      <div class="stat-box bg-primary-soft"><span>Administrators</span><strong>{{ admin_count }}</strong></div>
+    <div class="col-sm-6 col-md-3 col-xl-2">
+      <div class="stat-box bg-primary-soft">
+        <span>Administered Doses</span>
+        <strong>{{ record_count }}</strong>
+        <div class="small text-muted">Completed in system</div>
+      </div>
     </div>
-    <div class="col-sm-6 col-xl-2">
-      <div class="stat-box bg-success-soft"><span>Children</span><strong>{{ child_count }}</strong></div>
+    <div class="col-sm-6 col-md-3 col-xl-2">
+      <div class="stat-box bg-info-soft">
+        <span>Administered Today</span>
+        <strong>{{ today_administered_count }}</strong>
+        <div class="small text-muted">Logged today</div>
+      </div>
     </div>
-    <div class="col-sm-6 col-xl-2">
-      <div class="stat-box bg-warning-soft"><span>Records</span><strong>{{ record_count }}</strong></div>
+    <div class="col-sm-6 col-md-3 col-xl-2">
+      <div class="stat-box bg-warning-soft">
+        <span>Upcoming Doses</span>
+        <strong>{{ upcoming_vaccinations_count }}</strong>
+        <div class="small text-muted">Due or coming soon</div>
+      </div>
     </div>
-    <div class="col-sm-6 col-xl-2">
-      <div class="stat-box bg-danger-soft"><span>Vaccines / doses</span><strong>{{ vaccine_count }} / {{ schedule_count }}</strong></div>
+    <div class="col-sm-6 col-md-3 col-xl-2">
+      <div class="stat-box bg-danger-soft">
+        <span>Overdue Doses</span>
+        <strong>{{ overdue_vaccinations_count }}</strong>
+        <div class="small text-muted">Needs follow-up</div>
+      </div>
     </div>
   </div>
 
+  <!-- Secondary Metrics: UIP Registry & Staff Counts -->
+  <div class="row g-3 mb-4">
+    <div class="col-sm-4">
+      <div class="p-3 bg-white rounded border d-flex justify-content-between align-items-center">
+        <div>
+          <div class="text-muted small">Registered Healthcare Staff</div>
+          <div class="h5 mb-0 fw-bold">{{ worker_count }} Workers</div>
+        </div>
+        <i class="bi bi-hospital text-success fs-3"></i>
+      </div>
+    </div>
+    <div class="col-sm-4">
+      <div class="p-3 bg-white rounded border d-flex justify-content-between align-items-center">
+        <div>
+          <div class="text-muted small">Vaccine Registry / Doses</div>
+          <div class="h5 mb-0 fw-bold">{{ vaccine_count }} Vaccines / {{ schedule_count }} Milestones</div>
+        </div>
+        <i class="bi bi-shield-check text-primary fs-3"></i>
+      </div>
+    </div>
+    <div class="col-sm-4">
+      <div class="p-3 bg-white rounded border d-flex justify-content-between align-items-center">
+        <div>
+          <div class="text-muted small">System Administrators</div>
+          <div class="h5 mb-0 fw-bold">{{ admin_count }} Admins</div>
+        </div>
+        <i class="bi bi-person-lock text-danger fs-3"></i>
+      </div>
+    </div>
+  </div>
+
+  <!-- Real SQLite Analytics Section -->
+  <div class="card-form mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h2 class="h4 mb-0">System Analytics & Immunization Coverage</h2>
+      <span class="badge text-bg-light">Live SQLite Records</span>
+    </div>
+    <div class="row g-4">
+      <!-- Monthly Vaccination Trends Chart -->
+      <div class="col-lg-6">
+        <div class="border rounded p-3 h-100 bg-light-subtle">
+          <h3 class="h6 fw-bold mb-2">Monthly Vaccination Administration Trends</h3>
+          <div style="height: 240px; position: relative;">
+            <canvas id="monthlyTrendsChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Vaccination Status Breakdown -->
+      <div class="col-lg-6">
+        <div class="border rounded p-3 h-100 bg-light-subtle">
+          <h3 class="h6 fw-bold mb-2">Immunization Milestone Status (Total {{ record_count + upcoming_vaccinations_count
+            + overdue_vaccinations_count }})</h3>
+          <div style="height: 240px; position: relative;">
+            <canvas id="statusChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Village Coverage Distribution -->
+      <div class="col-lg-6">
+        <div class="border rounded p-3 h-100 bg-light-subtle">
+          <h3 class="h6 fw-bold mb-2">Village-wise Registered Children & Coverage</h3>
+          <div style="height: 240px; position: relative;">
+            <canvas id="villageChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Vaccine-wise Doses Administered -->
+      <div class="col-lg-6">
+        <div class="border rounded p-3 h-100 bg-light-subtle">
+          <h3 class="h6 fw-bold mb-2">Vaccine Administration Breakdown</h3>
+          <div style="height: 240px; position: relative;">
+            <canvas id="vaccineDistChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Management and Service Controls Row -->
   <div class="row g-4">
+    <!-- Left Column: Controls & Configuration -->
     <div class="col-lg-4">
+      <!-- Add Vaccine Form -->
       <div class="card-form">
         <div class="d-flex justify-content-between align-items-center mb-3">
-          <h2 class="h4 mb-0">Add vaccine</h2>
-          <a href="{{ url_for('main.add_vaccine') }}" class="btn btn-sm btn-outline-primary">Open form</a>
+          <h2 class="h4 mb-0">Add Vaccine</h2>
+          <a href="{{ url_for('main.admin_vaccines') }}" class="btn btn-sm btn-outline-primary">View all</a>
         </div>
         <form method="POST" action="{{ url_for('main.add_vaccine') }}">
           {{ vaccine_form.hidden_tag() }}
           <div class="mb-3">
             <label class="form-label">Name</label>
-            <input class="form-control" type="text" name="name" required>
+            <input class="form-control" type="text" name="name" required placeholder="e.g. Hepatitis B">
           </div>
           <div class="mb-3">
             <label class="form-label">Disease</label>
-            <input class="form-control" type="text" name="disease" required>
+            <input class="form-control" type="text" name="disease" required placeholder="Target disease">
           </div>
           <div class="mb-3">
             <label class="form-label">Description</label>
-            <textarea class="form-control" name="description" rows="3" required></textarea>
+            <textarea class="form-control" name="description" rows="2" required></textarea>
           </div>
           <div class="mb-3">
             <label class="form-label">Recommended Age</label>
-            <input class="form-control" type="text" name="recommended_age">
+            <input class="form-control" type="text" name="recommended_age" placeholder="e.g. Birth">
           </div>
-          <button type="submit" class="btn btn-primary">Add Vaccine</button>
+          <button type="submit" class="btn btn-primary w-100">Add Vaccine</button>
         </form>
       </div>
+
+      <!-- Send Test SMS -->
       <div class="card-form mt-4">
-        <h2 class="h4">Send test SMS</h2>
-        <p class="small text-muted">Automatic SMS: <strong>{{ 'enabled' if sms_enabled else 'disabled' }}</strong>. Twilio configuration: <strong>{{ 'ready' if not twilio_configuration_missing else 'incomplete' }}</strong>.</p>
+        <h2 class="h4">Send Test SMS</h2>
+        <p class="small text-muted mb-2">
+          Automatic SMS: <strong>{{ 'Enabled' if sms_enabled else 'Disabled' }}</strong>.
+          Twilio status: <strong>{{ 'Ready' if not twilio_configuration_missing else 'Missing configuration'
+            }}</strong>.
+        </p>
         {% if twilio_configuration_missing %}
-          <p class="small text-muted">Missing settings: {{ twilio_configuration_missing|join(', ') }}.</p>
+        <p class="small text-warning mb-2">Missing keys: {{ twilio_configuration_missing|join(', ') }}.</p>
         {% endif %}
-        <p class="small text-muted">Only the number configured in VAXICARE_TEST_SMS_NUMBER is allowed. Automatic parent SMS is {{ 'enabled' if sms_enabled else 'disabled' }}.</p>
-        {% if sms_test_rate_limit.configured %}
-          <p class="small text-muted">Allowlisted test number: <strong>{{ sms_test_recipient }}</strong>. Rate limit: {{ sms_test_rate_limit.attempts_in_window }} of {{ sms_test_rate_limit.max_attempts }} attempts used in the past hour; {{ sms_test_rate_limit.attempts_remaining }} remaining.
-            {% if sms_test_rate_limit.retry_at %}Next test allowed after {{ sms_test_rate_limit.retry_at.strftime('%d %b %Y %H:%M:%S UTC') }}.{% endif %}
-          </p>
-        {% elif sms_test_rate_limit.configuration_issue == 'missing' %}
-          <p class="small text-warning">VAXICARE_TEST_SMS_NUMBER is missing or empty in the project-root .env. Add the setting and restart Flask.</p>
-        {% else %}
-          <p class="small text-warning">VAXICARE_TEST_SMS_NUMBER must be an E.164 number: a plus sign, country code, and digits only (no spaces or punctuation). Restart Flask after correcting it.</p>
-        {% endif %}
-        <p class="small text-muted">Delivery mode: {{ 'simulation only (SMS_FORCE_DEMO=true)' if sms_force_demo else 'real provider delivery (SMS_FORCE_DEMO=false)' }}. Demo mode records the result without sending an SMS.</p>
+        <p class="small text-muted">
+          Rate limit: {{ sms_test_rate_limit.attempts_in_window }} of {{ sms_test_rate_limit.max_attempts }} attempts
+          used in the past hour; {{ sms_test_rate_limit.attempts_remaining }} remaining.
+        </p>
         <form method="POST" action="{{ url_for('main.admin_send_test_sms') }}">
           {{ test_sms_form.hidden_tag() }}
-          <label class="form-label" for="recipient">Configured test recipient</label>
-          <input id="recipient" class="form-control mb-3" type="tel" name="recipient" value="{{ sms_test_recipient }}" placeholder="+919876543210" required {% if not sms_test_rate_limit.configured %}disabled{% endif %}>
-          <button type="submit" class="btn btn-outline-primary" {% if not sms_test_rate_limit.configured or sms_test_rate_limit.retry_at %}disabled{% endif %}>{{ t('send_test_sms') }}</button>
+          <label class="form-label" for="recipient">Recipient Mobile (+CountryCode...)</label>
+          <input id="recipient" class="form-control mb-3" type="tel" name="recipient" value="{{ sms_test_recipient }}"
+            placeholder="+919876543210" required>
+          <button type="submit" class="btn btn-outline-primary w-100">{{ t('send_test_sms') }}</button>
         </form>
       </div>
+
+      <!-- Send Test Email -->
       <div class="card-form mt-4">
-        <h2 class="h4">Send test email</h2>
-        <p class="small text-muted">Admin-only. Sends one real email to the address you enter; nothing is sent unless you submit this form.</p>
-        <p class="small text-muted">Rate limit: {{ email_test_rate_limit.attempts_in_window }} of {{ email_test_rate_limit.max_attempts }} attempts used in the past hour; at least five minutes between attempts. Failed sends count.</p>
-        <p class="small text-muted mb-2">Attempts remaining: <strong>{{ email_test_rate_limit.attempts_remaining }}</strong> of {{ email_test_rate_limit.max_attempts }}.</p>
+        <h2 class="h4">Send Test Email</h2>
+        <p class="small text-muted mb-2">
+          SMTP status: <strong>{{ 'Ready' if email_test_rate_limit.configured else 'Missing configuration' }}</strong>.
+        </p>
+        <p class="small text-muted mb-2">
+          Rate limit: {{ email_test_rate_limit.attempts_in_window }} of {{ email_test_rate_limit.max_attempts }} used in
+          the past hour; {{ email_test_rate_limit.attempts_remaining }} remaining.
+        </p>
         {% if email_test_rate_limit.retry_at %}
-          <div class="alert alert-warning py-2" id="email-test-cooldown" role="status">
-            Cooldown active. Next test available in
-            <strong id="email-test-countdown" data-remaining-seconds="{{ email_test_rate_limit.retry_in_seconds }}">calculating...</strong>.
-            Earliest safe retry: {{ email_test_rate_limit.retry_at.strftime('%d %b %Y %H:%M:%S UTC') }}.
-          </div>
+        <div class="alert alert-warning py-2 small" id="email-test-cooldown" role="status">
+          Cooldown active. Next test available in
+          <strong id="email-test-countdown"
+            data-remaining-seconds="{{ email_test_rate_limit.retry_in_seconds }}">calculating...</strong>.
+        </div>
         {% else %}
-          <p class="small text-success">No cooldown is active. You may send one test email.</p>
+        <p class="small text-success mb-2">No cooldown active.</p>
         {% endif %}
         <form method="POST" action="{{ url_for('main.admin_send_test_email') }}">
           {{ test_email_form.hidden_tag() }}
-          <label class="form-label" for="email-recipient">Test recipient</label>
-          {{ test_email_form.recipient(id='email-recipient', class_='form-control mb-3', type='email', autocomplete='email', required=True) }}
-          {% for error in test_email_form.recipient.errors %}<div class="field-error mb-3">{{ error }}</div>{% endfor %}
-          <button type="submit" class="btn btn-outline-primary">{{ test_email_form.submit.label.text }}</button>
+          <label class="form-label" for="email-recipient">Recipient Email</label>
+          {{ test_email_form.recipient(id='email-recipient', class_='form-control mb-3', type='email',
+          autocomplete='email', required=True) }}
+          <button type="submit" class="btn btn-outline-primary w-100" {% if email_test_rate_limit.retry_at %}disabled{%
+            endif %}>Send Test Email</button>
         </form>
       </div>
+
+      <!-- Automatic Email Reminders Settings -->
       <div class="card-form mt-4">
-        <h2 class="h4 mb-2">Automatic vaccination email reminders</h2>
+        <h2 class="h4 mb-2">Automatic Email Reminders</h2>
         <p class="small text-muted">
           Status:
           <strong class="{% if automatic_email_reminders_enabled %}text-success{% else %}text-secondary{% endif %}">
             {{ 'Enabled' if automatic_email_reminders_enabled else 'Disabled' }}
           </strong>
-          . The scheduler checks every {{ reminder_timing_settings.interval_seconds }} seconds while its separate process is running.
         </p>
-        {% if automatic_email_reminders_enabled %}
-          <div class="alert alert-warning py-2" role="status">
-            Enabling allows scheduled reminders to be sent to registered parent email addresses.
-          </div>
-        {% else %}
-          <p class="small text-muted">Disabled by default. Saving this setting does not send an email immediately.</p>
-        {% endif %}
-        <form method="POST" action="{{ url_for('main.admin_update_automatic_email_reminders') }}" id="automatic-email-reminder-settings-form">
+        <form method="POST" action="{{ url_for('main.admin_update_automatic_email_reminders') }}"
+          id="automatic-email-reminder-settings-form">
           {{ automatic_email_reminder_settings_form.hidden_tag() }}
           <div class="mb-3">
             {{ automatic_email_reminder_settings_form.enabled.label(class_='form-label') }}
-            {{ automatic_email_reminder_settings_form.enabled(class_='form-select', id='automatic-email-reminders-enabled') }}
+            {{ automatic_email_reminder_settings_form.enabled(class_='form-select',
+            id='automatic-email-reminders-enabled') }}
           </div>
           <div class="mb-3">
             {{ automatic_email_reminder_settings_form.days_before.label(class_='form-label') }}
             {{ automatic_email_reminder_settings_form.days_before(class_='form-control', min='0', max='365') }}
-            {% for error in automatic_email_reminder_settings_form.days_before.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
           </div>
           <div class="mb-3">
             {{ automatic_email_reminder_settings_form.overdue_after_days.label(class_='form-label') }}
             {{ automatic_email_reminder_settings_form.overdue_after_days(class_='form-control', min='1', max='365') }}
-            {% for error in automatic_email_reminder_settings_form.overdue_after_days.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
           </div>
-          <div class="mb-3">
-            {{ automatic_email_reminder_settings_form.interval_seconds.label(class_='form-label') }}
-            {{ automatic_email_reminder_settings_form.interval_seconds(class_='form-control', min='10', max='86400') }}
-            {% for error in automatic_email_reminder_settings_form.interval_seconds.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
-          </div>
-          {{ automatic_email_reminder_settings_form.submit(class_='btn btn-outline-primary') }}
+          <button type="submit" class="btn btn-outline-primary w-100">Save Reminder Settings</button>
         </form>
       </div>
+
+      <!-- Scheduler Health -->
       <div class="card-form mt-4">
-        <h2 class="h4 mb-2">Scheduler and notification health</h2>
-        <p class="mb-1">Scheduler process: <strong>{{ 'Running' if scheduler_is_running else 'Not running' }}</strong>.</p>
+        <h2 class="h4 mb-2">Scheduler Health</h2>
+        <p class="mb-1 small">
+          Status: <strong>{{ 'Active' if scheduler_is_running else 'Idle / On-Demand' }}</strong>
+        </p>
         {% if scheduler_state %}
-          <p class="small text-muted mb-1">Last cycle status: {{ scheduler_state.status|title }}{% if scheduler_state.last_completed_at %} at {{ scheduler_state.last_completed_at.strftime('%d %b %Y %H:%M:%S UTC') }}{% endif %}.</p>
-          {% if scheduler_is_running and scheduler_state.next_run_at %}
-            <p class="small text-muted mb-1">Next scheduler check: {{ scheduler_state.next_run_at.strftime('%d %b %Y %H:%M:%S UTC') }}.</p>
-          {% elif scheduler_is_running %}
-            <p class="small text-muted mb-1">A scheduler cycle is in progress; the next check follows its completion.</p>
-          {% else %}
-            <p class="small text-muted mb-1">Next scheduler check: —. Start the separate scheduler process to enable scheduled checks.</p>
+        <p class="small text-muted mb-1">
+          Last cycle: {{ scheduler_state.status|title }}
+          {% if scheduler_state.last_completed_at %}
+          at {{ scheduler_state.last_completed_at.strftime('%d %b %Y %H:%M:%S UTC') }}
           {% endif %}
-          {% if scheduler_state.last_error %}<p class="small text-danger mb-2">Last scheduler error: {{ scheduler_state.last_error }}</p>{% endif %}
-          {% if scheduler_state.last_result %}<p class="small text-muted mb-2">Last cycle results: {{ scheduler_state.last_result }}</p>{% endif %}
+        </p>
+        {% if scheduler_state.last_result %}
+        <div class="alert alert-info py-2 small mb-0">{{ scheduler_state.last_result }}</div>
+        {% endif %}
         {% else %}
-          <p class="small text-muted">No scheduler cycle has been recorded. Start the separate scheduler process to enable scheduled checks.</p>
+        <p class="small text-muted mb-0">No automated run recorded. Use "Run Reminders Check" above to trigger a check.
+        </p>
         {% endif %}
-        <p class="small mb-2">Recorded delivery failures: <strong>{{ email_failure_count }} email</strong>, <strong>{{ sms_failure_count }} SMS</strong>, <strong>{{ fcm_failure_count }} push</strong>.</p>
-        {% if failed_email_notifications or failed_sms_notifications or failed_fcm_notifications or failed_fcm_test_attempts %}
-          <div class="table-responsive">
-            <table class="table table-sm">
-              <thead><tr><th>Channel</th><th>Recipient</th><th>Failure</th><th>Recorded (UTC)</th></tr></thead>
-              <tbody>
-                {% for item in failed_email_notifications %}
-                  <tr><td>Email</td><td>{{ item.recipient }}</td><td>{{ item.failure_reason or 'Unspecified delivery failure' }}</td><td>{{ item.created_at.strftime('%d %b %Y %H:%M') }}</td></tr>
-                {% endfor %}
-                {% for item in failed_sms_notifications %}
-                  <tr><td>SMS</td><td>{{ item.recipient }}</td><td>{{ item.failure_reason or 'Unspecified delivery failure' }}</td><td>{{ item.created_at.strftime('%d %b %Y %H:%M') }}</td></tr>
-                {% endfor %}
-                {% for item in failed_fcm_notifications %}
-                  <tr><td>Browser push</td><td>{{ item.user.email if item.user else '—' }}</td><td>{{ item.failure_reason or 'Unspecified delivery failure' }}</td><td>{{ item.created_at.strftime('%d %b %Y %H:%M') }}</td></tr>
-                {% endfor %}
-                {% for item in failed_fcm_test_attempts %}
-                  <tr><td>Browser push test</td><td>{{ item.user.email if item.user else '—' }}</td><td>{{ item.failure_reason or 'Unspecified delivery failure' }}</td><td>{{ item.created_at.strftime('%d %b %Y %H:%M') }}</td></tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
-        {% else %}
-          <p class="small text-muted mb-0">No failed email, SMS, or push attempts are recorded.</p>
-        {% endif %}
-      </div>
-      <div class="card-form mt-4">
-        <div class="d-flex justify-content-between align-items-center gap-2">
-          <h2 class="h4 mb-0">Browser push notifications</h2>
-          <a href="{{ url_for('main.admin_notifications') }}#fcm-history" class="small">View history</a>
-        </div>
-        <p class="small text-muted mt-2">FCM sending: <strong>{{ 'enabled' if fcm_enabled else 'disabled' }}</strong>. Runtime status: <strong>{{ fcm_status|replace('_', ' ')|title }}</strong>.</p>
-        <p class="small text-muted">Active parent browser registrations: <strong>{{ active_fcm_installation_count }}</strong>. Recorded sends: <strong>{{ fcm_notification_counts.get('sent', 0) }}</strong>; reminder failures: <strong>{{ fcm_notification_counts.get('failed', 0) }}</strong>; test failures: <strong>{{ fcm_test_failure_count }}</strong>.</p>
-        {% if fcm_notifications %}
-          <div class="table-responsive">
-            <table class="table table-sm table-hover">
-              <thead><tr><th>Recorded (UTC)</th><th>Parent</th><th>Child / vaccine</th><th>Type</th><th>Status</th></tr></thead>
-              <tbody>
-                {% for item in fcm_notifications %}
-                  <tr>
-                    <td>{{ item.created_at.strftime('%d %b %Y %H:%M') }}</td>
-                    <td>{{ item.user.email if item.user else '—' }}</td>
-                    <td>{{ item.child.name if item.child else '—' }}{% if item.vaccine %}<div class="small text-muted">{{ item.vaccine.name }} / {{ item.schedule.dose_label if item.schedule else '—' }}</div>{% endif %}</td>
-                    <td>{{ item.reminder_type|replace('_', ' ')|title }}</td>
-                    <td>{{ item.status|title }}</td>
-                  </tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
-        {% else %}
-          <p class="small text-muted mb-0">No browser push attempts are recorded.</p>
-        {% endif %}
-        {% if fcm_test_attempts %}
-          <h3 class="h6 mt-3">Recent own-browser test attempts</h3>
-          <ul class="small mb-0">
-            {% for item in fcm_test_attempts %}
-              <li>{{ item.created_at.strftime('%d %b %Y %H:%M') }} · {{ item.user.email if item.user else '—' }} · {{ item.status|title }}{% if item.failure_reason %} · {{ item.failure_reason }}{% endif %}</li>
-            {% endfor %}
-          </ul>
-        {% endif %}
-      </div>
-      <div class="card-form mt-4">
-        <h2 class="h4 mb-2">Vaccination Email Notifications</h2>
-        <p class="small text-muted">Manual sends go to the selected parent's registered email only. Submission sends one real reminder; automatic reminders remain {{ 'enabled' if automatic_email_reminders_enabled else 'disabled' }}.</p>
-        <form method="POST" action="{{ url_for('main.admin_send_vaccination_email') }}" id="vaccination-email-form">
-          {{ reminder_email_form.hidden_tag() }}
-          <div class="mb-3">
-            <label class="form-label" for="reminder-parent">Parent</label>
-            <select class="form-select" id="reminder-parent" name="parent_id" required>
-              <option value="0">Select a parent</option>
-              {% for parent in reminder_email_parents %}
-                {% set parent_name = " ".join([parent.first_name or "", parent.last_name or ""])|trim %}
-                <option value="{{ parent.id }}" data-email="{{ parent.user.email }}">{{ parent_name or parent.user.full_name or parent.user.username }} ({{ parent.user.email }})</option>
-              {% endfor %}
-            </select>
-          </div>
-          <p class="small mb-3" id="reminder-recipient" aria-live="polite">Registered recipient: select a parent.</p>
-          <div class="mb-3">
-            <label class="form-label" for="reminder-child">Child</label>
-            <select class="form-select" id="reminder-child" name="child_id" required disabled>
-              <option value="0">Select a child</option>
-              {% for child in reminder_email_children %}
-                <option value="{{ child.id }}" data-parent-id="{{ child.parent_id }}">{{ child.name }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="mb-3">
-            <label class="form-label" for="reminder-vaccine">Vaccine</label>
-            <select class="form-select" id="reminder-vaccine" name="vaccine_id" required>
-              <option value="0">Select a vaccine</option>
-              {% for vaccine in reminder_email_vaccines %}
-                <option value="{{ vaccine.id }}">{{ vaccine.name }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="mb-3">
-            <label class="form-label" for="reminder-dose">Scheduled dose</label>
-            <select class="form-select" id="reminder-dose" name="schedule_id" required disabled>
-              <option value="0">Select a scheduled dose</option>
-              {% for schedule in reminder_email_schedules %}
-                <option value="{{ schedule.id }}" data-vaccine-id="{{ schedule.vaccine_id }}">{{ schedule.dose_label }} ({{ schedule.vaccine.name }})</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="mb-3">
-            <label class="form-label" for="reminder-type">Reminder type</label>
-            {{ reminder_email_form.reminder_type(id='reminder-type', class_='form-select') }}
-          </div>
-          <button type="submit" class="btn btn-primary">{{ reminder_email_form.submit.label.text }}</button>
-        </form>
       </div>
     </div>
+
+    <!-- Right Column: Manual Dispatch and Audit Tables -->
     <div class="col-lg-8">
-      <div class="card-form">
-        <div class="d-flex justify-content-between align-items-center">
-          <div><h2 class="h4 mb-1">SMS delivery status</h2><p class="small text-muted">“Sent” means accepted by the provider, not confirmed handset delivery.</p></div>
-          <a href="{{ url_for('main.admin_notifications') }}" class="small">View all</a>
-        </div>
-        {% set total_notifications = notification_counts.values()|sum %}
-        <div class="notification-chart my-3" role="img" aria-label="Notification status summary">
-          {% for status, color in [('sent', 'success'), ('failed', 'danger'), ('pending', 'warning'), ('simulated', 'info'), ('skipped', 'secondary'), ('disabled', 'secondary')] %}
-            {% set count = notification_counts.get(status, 0) %}
-            {% set percent = (count * 100 / total_notifications)|round|int if total_notifications else 0 %}
-            <div class="chart-row">
-              <span>{{ status|title }}</span>
-              <div class="progress" aria-hidden="true"><div class="progress-bar bg-{{ color }}" style="width: {{ percent }}%"></div></div>
-              <strong>{{ count }}</strong>
+      <!-- Manual Email Reminder Form -->
+      <div class="card-form mb-4">
+        <h2 class="h4 mb-2">Send Milestone Reminder Email</h2>
+        <p class="small text-muted">Dispatch a targeted reminder to a registered parent for a specific dose milestone.
+        </p>
+        <form method="POST" action="{{ url_for('main.admin_send_vaccination_email') }}" id="vaccination-email-form">
+          {{ reminder_email_form.hidden_tag() }}
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label" for="reminder-parent">Select Parent</label>
+              <select class="form-select" id="reminder-parent" name="parent_id" required>
+                <option value="0">Select parent</option>
+                {% for parent in reminder_email_parents %}
+                <option value="{{ parent.id }}" data-email="{{ parent.user.email }}">{{ parent.first_name }} {{
+                  parent.last_name or '' }} ({{ parent.user.email }})</option>
+                {% endfor %}
+              </select>
             </div>
-          {% endfor %}
+            <div class="col-md-6 mb-3">
+              <label class="form-label" for="reminder-child">Select Child</label>
+              <select class="form-select" id="reminder-child" name="child_id" required disabled>
+                <option value="0">Select child</option>
+                {% for child in reminder_email_children %}
+                <option value="{{ child.id }}" data-parent-id="{{ child.parent_id }}">{{ child.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-md-4 mb-3">
+              <label class="form-label" for="reminder-vaccine">Vaccine</label>
+              <select class="form-select" id="reminder-vaccine" name="vaccine_id" required>
+                <option value="0">Select vaccine</option>
+                {% for vaccine in reminder_email_vaccines %}
+                <option value="{{ vaccine.id }}">{{ vaccine.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-4 mb-3">
+              <label class="form-label" for="reminder-dose">Scheduled Dose</label>
+              <select class="form-select" id="reminder-dose" name="schedule_id" required disabled>
+                <option value="0">Select dose</option>
+                {% for schedule in reminder_email_schedules %}
+                <option value="{{ schedule.id }}" data-vaccine-id="{{ schedule.vaccine_id }}">{{ schedule.dose_label }}
+                  ({{ schedule.vaccine.name }})</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-4 mb-3">
+              <label class="form-label" for="reminder-type">Type</label>
+              {{ reminder_email_form.reminder_type(id='reminder-type', class_='form-select') }}
+            </div>
+          </div>
+          <p class="small text-muted mb-3" id="reminder-recipient">Recipient: Select a parent.</p>
+          <button type="submit" class="btn btn-primary">Dispatch Reminder</button>
+        </form>
+      </div>
+
+      <!-- Recent SMS Delivery Status -->
+      <div class="card-form mb-4">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <div>
+            <h2 class="h4 mb-0">Recent SMS Deliveries</h2>
+            <p class="small text-muted mb-0">Delivery audit from live SMS logs.</p>
+          </div>
+          <a href="{{ url_for('main.admin_notifications', channel='sms') }}" class="small">View all SMS</a>
         </div>
         <div class="table-responsive">
-          <table class="table table-sm table-hover">
-            <thead>
+          <table class="table table-sm table-hover align-middle">
+            <thead class="table-light">
               <tr>
-                <th>Created</th><th>Recipient</th><th>Child / vaccine</th><th>Type</th><th>Status</th><th>Failure</th>
+                <th>Time</th>
+                <th>Recipient</th>
+                <th>Child / Vaccine</th>
+                <th>Status</th>
+                <th>Reason / SID</th>
               </tr>
             </thead>
             <tbody>
               {% for log in reminder_logs %}
-                <tr>
-                  <td>{{ log.created_at.strftime('%d %b %Y %H:%M') }}</td>
-                  <td>{{ log.recipient }}</td>
-                  <td>{{ log.child.name if log.child else '—' }}{% if log.vaccine %} / {{ log.vaccine.name }}{% endif %}</td>
-                  <td>{{ log.message_type|replace('_', ' ')|title }}</td>
-                  <td><span class="badge {% if log.status == 'sent' %}text-bg-success{% elif log.status == 'failed' %}text-bg-danger{% elif log.status == 'simulated' %}text-bg-info{% elif log.status in ['skipped', 'disabled'] %}text-bg-secondary{% else %}text-bg-warning{% endif %}">{{ log.status|title }}</span></td>
-                  <td>{{ log.failure_reason or '—' }}</td>
-                </tr>
+              <tr>
+                <td class="small">{{ log.created_at.strftime('%d %b %H:%M') }}</td>
+                <td>{{ log.recipient }}</td>
+                <td>{{ log.child.name if log.child else 'Test' }}{% if log.vaccine %} ({{ log.vaccine.name }}){% endif
+                  %}</td>
+                <td>
+                  <span
+                    class="badge {% if log.status == 'sent' %}text-bg-success{% elif log.status == 'failed' %}text-bg-danger{% elif log.status == 'simulated' %}text-bg-info{% else %}text-bg-warning{% endif %}">
+                    {{ log.status|title }}
+                  </span>
+                </td>
+                <td class="small text-muted">{{ log.failure_reason or log.provider_message_id or '—' }}</td>
+              </tr>
               {% else %}
-                <tr><td colspan="6" class="text-muted">No SMS notifications logged yet.</td></tr>
+              <tr>
+                <td colspan="5" class="text-center py-3 text-muted">No SMS notifications recorded yet.</td>
+              </tr>
               {% endfor %}
             </tbody>
           </table>
         </div>
       </div>
-      <div class="card-form mt-4">
-        <div>
-          <h2 class="h4 mb-1">Email reminder outcomes</h2>
-          <p class="small text-muted">Sent means the SMTP server accepted the message; it does not confirm inbox delivery.</p>
+
+      <!-- Recent Email Reminder Outcomes -->
+      <div class="card-form mb-4">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <div>
+            <h2 class="h4 mb-0">Recent Email Reminders</h2>
+            <p class="small text-muted mb-0">Immunization notice delivery outcomes.</p>
+          </div>
+          <a href="{{ url_for('main.admin_notifications', channel='email') }}" class="small">View all Emails</a>
         </div>
         <div class="table-responsive">
-          <table class="table table-sm table-hover">
-            <thead>
-              <tr><th>Attempted (UTC)</th><th>Parent</th><th>Child</th><th>Vaccine / dose</th><th>Recipient</th><th>Type</th><th>Status</th><th>Failure</th></tr>
+          <table class="table table-sm table-hover align-middle">
+            <thead class="table-light">
+              <tr>
+                <th>Time</th>
+                <th>Recipient</th>
+                <th>Child / Vaccine</th>
+                <th>Status</th>
+                <th>Result</th>
+              </tr>
             </thead>
             <tbody>
               {% for item in email_reminder_logs %}
-                <tr>
-                  <td>{{ item.created_at.strftime('%d %b %Y %H:%M') }}</td>
-                  <td>{% if item.user and item.user.parent %}{{ (item.user.parent.first_name ~ ' ' ~ (item.user.parent.last_name or ''))|trim }}{% elif item.user %}{{ item.user.full_name or item.user.username }}{% else %}—{% endif %}</td>
-                  <td>{{ item.child.name if item.child else '—' }}{% if item.is_test %}<div class="small text-muted">Test</div>{% endif %}</td>
-                  <td>{{ item.vaccine.name if item.vaccine else '—' }} / {{ item.schedule.dose_label if item.schedule else '—' }}</td>
-                  <td>{{ item.recipient }}</td>
-                  <td>{{ item.reminder_type|replace('_', ' ')|title }}<div class="small text-muted">Due {{ item.due_date.strftime('%d %b %Y') }}</div></td>
-                  <td><span class="badge {% if item.status == 'sent' %}text-bg-success{% elif item.status == 'failed' %}text-bg-danger{% else %}text-bg-warning{% endif %}">{{ item.status|title }}</span></td>
-                  <td>{{ item.failure_reason or '—' }}</td>
-                </tr>
+              <tr>
+                <td class="small">{{ item.created_at.strftime('%d %b %H:%M') }}</td>
+                <td>{{ item.recipient }}</td>
+                <td>{{ item.child.name if item.child else '—' }} ({{ item.vaccine.name if item.vaccine else '—' }})</td>
+                <td>
+                  <span
+                    class="badge {% if item.status == 'sent' %}text-bg-success{% elif item.status == 'failed' %}text-bg-danger{% else %}text-bg-info{% endif %}">
+                    {{ item.status|title }}
+                  </span>
+                </td>
+                <td class="small text-muted">{{ item.failure_reason or item.provider_response or 'Accepted' }}</td>
+              </tr>
               {% else %}
-                <tr><td colspan="8" class="text-muted">No email reminders recorded yet.</td></tr>
+              <tr>
+                <td colspan="5" class="text-center py-3 text-muted">No email reminders recorded yet.</td>
+              </tr>
               {% endfor %}
             </tbody>
           </table>
@@ -353,26 +451,117 @@
 
 {% block scripts %}
 {{ super() }}
+<!-- Chart.js CDN -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
 <script>
   (() => {
-    const automaticSettingsForm = document.getElementById("automatic-email-reminder-settings-form");
-    const automaticEnabledSelect = document.getElementById("automatic-email-reminders-enabled");
-    if (automaticSettingsForm && automaticEnabledSelect) {
-      automaticSettingsForm.addEventListener("submit", event => {
-        if (automaticEnabledSelect.value === "true" &&
-            !window.confirm("Enable automatic vaccination reminder emails to registered parent addresses?")) {
-          event.preventDefault();
-        }
+    // 1. Chart.js Initializations using Real SQLite Analytics Data
+    const monthlyTrendsData = {{ monthly_trends| tojson
+  }};
+  const villageStatsData = {{ village_stats| tojson }};
+  const vaccineDistData = {{ vaccine_distribution| tojson }};
+
+  // Monthly trends
+  const monthLabels = Object.keys(monthlyTrendsData).length > 0 ? Object.keys(monthlyTrendsData) : ["No records"];
+  const monthCounts = Object.keys(monthlyTrendsData).length > 0 ? Object.values(monthlyTrendsData) : [0];
+  const ctxMonthly = document.getElementById('monthlyTrendsChart');
+  if (ctxMonthly) {
+    new Chart(ctxMonthly, {
+      type: 'line',
+      data: {
+        labels: monthLabels,
+        datasets: [{
+          label: 'Vaccinations Administered',
+          data: monthCounts,
+          borderColor: '#006934',
+          backgroundColor: 'rgba(0, 105, 52, 0.1)',
+          fill: true,
+          tension: 0.3
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+      }
+    });
+  }
+
+  // Status breakdown chart
+  const ctxStatus = document.getElementById('statusChart');
+  if (ctxStatus) {
+    new Chart(ctxStatus, {
+      type: 'doughnut',
+      data: {
+        labels: ['Completed', 'Upcoming / Due', 'Overdue'],
+        datasets: [{
+          data: [{{ record_count }}, {{ upcoming_vaccinations_count }}, {{ overdue_vaccinations_count }}],
+  backgroundColor: ['#006934', '#0d6efd', '#E01829'],
+    hoverOffset: 4
+          }]
+        },
+  options: {
+    responsive: true,
+      maintainAspectRatio: false
+  }
       });
     }
 
-    const form = document.getElementById("vaccination-email-form");
-    if (!form) return;
+  // Village coverage chart
+  const villageLabels = villageStatsData.length > 0 ? villageStatsData.map(d => d.village) : ['No village data'];
+  const villageChildren = villageStatsData.length > 0 ? villageStatsData.map(d => d.children) : [0];
+  const villageAdministered = villageStatsData.length > 0 ? villageStatsData.map(d => d.administered) : [0];
+  const ctxVillage = document.getElementById('villageChart');
+  if (ctxVillage) {
+    new Chart(ctxVillage, {
+      type: 'bar',
+      data: {
+        labels: villageLabels,
+        datasets: [
+          { label: 'Children', data: villageChildren, backgroundColor: '#0d6efd' },
+          { label: 'Vaccines Given', data: villageAdministered, backgroundColor: '#006934' }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+      }
+    });
+  }
+
+  // Vaccine distribution chart
+  const vaccineNames = Object.keys(vaccineDistData).length > 0 ? Object.keys(vaccineDistData) : ['None'];
+  const vaccineCounts = Object.keys(vaccineDistData).length > 0 ? Object.values(vaccineDistData) : [0];
+  const ctxVaccine = document.getElementById('vaccineDistChart');
+  if (ctxVaccine) {
+    new Chart(ctxVaccine, {
+      type: 'bar',
+      data: {
+        labels: vaccineNames,
+        datasets: [{
+          label: 'Doses Administered',
+          data: vaccineCounts,
+          backgroundColor: '#006934'
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        indexAxis: 'y',
+        scales: { x: { beginAtZero: true, ticks: { precision: 0 } } }
+      }
+    });
+  }
+
+  // 2. Dynamic dropdown filtering for Manual Email Reminder form
+  const form = document.getElementById("vaccination-email-form");
+  if (form) {
     const parentSelect = document.getElementById("reminder-parent");
     const childSelect = document.getElementById("reminder-child");
     const vaccineSelect = document.getElementById("reminder-vaccine");
     const doseSelect = document.getElementById("reminder-dose");
-    const typeSelect = document.getElementById("reminder-type");
     const recipient = document.getElementById("reminder-recipient");
 
     const filterOptions = (select, dataKey, selectedValue) => {
@@ -393,8 +582,8 @@
     const updateParent = () => {
       const option = parentSelect.options[parentSelect.selectedIndex];
       recipient.textContent = option && option.dataset.email
-        ? `Registered recipient: ${option.dataset.email}`
-        : "Registered recipient: select a parent.";
+        ? `Recipient: ${option.dataset.email}`
+        : "Recipient: Select a parent.";
       filterOptions(childSelect, "parentId", parentSelect.value);
     };
 
@@ -402,43 +591,35 @@
     vaccineSelect.addEventListener("change", updateVaccine);
     updateParent();
     updateVaccine();
+  }
 
-    form.addEventListener("submit", event => {
-      const option = parentSelect.options[parentSelect.selectedIndex];
-      const email = option && option.dataset.email;
-      if (!email || !window.confirm(`Send this reminder email to ${email}?`)) {
-        event.preventDefault();
-      }
-    });
-  })();
-
-  (() => {
-    const countdown = document.getElementById("email-test-countdown");
-    const cooldown = document.getElementById("email-test-cooldown");
-    if (!countdown || !cooldown) return;
-
+  // 3. Email Cooldown Countdown Timer
+  const countdown = document.getElementById("email-test-countdown");
+  const cooldown = document.getElementById("email-test-cooldown");
+  if (countdown && cooldown) {
     let remaining = Number(countdown.dataset.remainingSeconds);
-    if (!Number.isFinite(remaining)) return;
-
-    const render = () => {
-      const hours = Math.floor(remaining / 3600);
-      const minutes = Math.floor((remaining % 3600) / 60);
-      const seconds = remaining % 60;
-      countdown.textContent = hours > 0
-        ? `${hours}h ${String(minutes).padStart(2, "0")}m ${String(seconds).padStart(2, "0")}s`
-        : `${minutes}m ${String(seconds).padStart(2, "0")}s`;
-    };
-
-    render();
-    const timer = window.setInterval(() => {
-      remaining = Math.max(0, remaining - 1);
+    if (Number.isFinite(remaining)) {
+      const render = () => {
+        const hours = Math.floor(remaining / 3600);
+        const minutes = Math.floor((remaining % 3600) / 60);
+        const seconds = remaining % 60;
+        countdown.textContent = hours > 0
+          ? `${hours}h ${String(minutes).padStart(2, "0")}m ${String(seconds).padStart(2, "0")}s`
+          : `${minutes}m ${String(seconds).padStart(2, "0")}s`;
+      };
       render();
-      if (remaining === 0) {
-        window.clearInterval(timer);
-        cooldown.setAttribute("role", "status");
-        cooldown.append(" Cooldown elapsed; refresh this dashboard to update the remaining-attempt count before sending.");
-      }
-    }, 1000);
-  })();
+      const timer = window.setInterval(() => {
+        remaining = Math.max(0, remaining - 1);
+        render();
+        if (remaining === 0) {
+          window.clearInterval(timer);
+          cooldown.classList.remove("alert-warning");
+          cooldown.classList.add("alert-success");
+          cooldown.textContent = "Cooldown elapsed. Refresh the page to send another test email.";
+        }
+      }, 1000);
+    }
+  }
+  }) ();
 </script>
 {% endblock %}

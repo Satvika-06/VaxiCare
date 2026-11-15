@@ -1,99 +1,290 @@
 {% extends 'base.html' %}
-{% block title %}{{ child.name }}{% endblock %}
+{% block title %}{{ child.name }} — Child Profile{% endblock %}
 
 {% block content %}
 <section class="container py-5">
+
+  {# ── Header ─────────────────────────────────────────────────────────────── #}
   <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
     <div>
-      <span class="eyebrow">{{ t('child_profile') }}</span>
-      <h1>{{ child.name }}</h1>
+      <a href="{{ url_for('main.parent_dashboard') }}" class="btn btn-link ps-0 text-muted mb-1">
+        <i class="bi bi-arrow-left me-1"></i>Back to dashboard
+      </a>
+      <span class="d-block eyebrow" style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--primary)">
+        {{ t('child_profile') }}
+      </span>
+      <h1 class="mb-0">{{ child.name }}</h1>
     </div>
     <div class="d-flex gap-2 flex-wrap">
-      <a href="{{ url_for('main.download_vaccination_card', child_id=child.id) }}" class="btn btn-primary">{{ t('download_pdf') }}</a>
-      <a href="{{ url_for('main.public_child_record', token=child.record_token) }}" class="btn btn-outline-primary" target="_blank" rel="noopener">{{ t('view_record') }}</a>
+      <a href="{{ url_for('main.edit_child', child_id=child.id) }}" class="btn btn-outline-secondary">
+        <i class="bi bi-pencil me-1"></i>Edit
+      </a>
+      <a href="{{ url_for('main.download_vaccination_card', child_id=child.id) }}" class="btn btn-primary">
+        <i class="bi bi-download me-1"></i>{{ t('download_pdf') }}
+      </a>
+      <a href="{{ url_for('main.public_child_record', token=child.record_token) }}"
+         class="btn btn-outline-primary" target="_blank" rel="noopener">
+        <i class="bi bi-box-arrow-up-right me-1"></i>{{ t('view_record') }}
+      </a>
     </div>
   </div>
 
+  {# ── Info + Progress row ─────────────────────────────────────────────────── #}
   <div class="row g-4 mb-4">
+
+    {# Child details card #}
     <div class="col-lg-4">
       <div class="info-card h-100">
-        <h4>Child Details</h4>
-        <p><strong>Name:</strong> {{ child.name }}</p>
-        <p><strong>DOB:</strong> {{ child.dob }}</p>
-        <p><strong>Gender:</strong> {{ child.gender }}</p>
-        <p><strong>Village:</strong> {{ child.village }}</p>
-        <p><strong>Allergies:</strong> {{ child.allergies or 'None' }}</p>
+        <div class="d-flex align-items-center gap-3 mb-3">
+          <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0"
+               style="width:52px;height:52px;background:var(--primary-light);">
+            <i class="bi bi-person-fill fs-3" style="color:var(--primary)"></i>
+          </div>
+          <div>
+            <h4 class="mb-0">{{ child.name }}</h4>
+            <div class="small text-muted">
+              {{ child.gender | capitalize if child.gender else 'Child' }}
+              &middot;
+              <span class="badge bg-light text-dark border child-age-badge" data-dob="{{ child.dob.isoformat() }}"></span>
+            </div>
+          </div>
+        </div>
+        <dl class="row row-cols-1 g-2 mb-0">
+          <div class="col d-flex justify-content-between border-bottom pb-1">
+            <dt class="text-muted small fw-normal">Date of birth</dt>
+            <dd class="mb-0 small fw-semibold">{{ child.dob.strftime('%d %b %Y') }}</dd>
+          </div>
+          <div class="col d-flex justify-content-between border-bottom pb-1">
+            <dt class="text-muted small fw-normal">Village</dt>
+            <dd class="mb-0 small fw-semibold">{{ child.village or '—' }}</dd>
+          </div>
+          <div class="col d-flex justify-content-between border-bottom pb-1">
+            <dt class="text-muted small fw-normal">Allergies</dt>
+            <dd class="mb-0 small fw-semibold text-danger">{{ child.allergies or 'None reported' }}</dd>
+          </div>
+          {% if child.notes %}
+          <div class="col d-flex justify-content-between pt-1">
+            <dt class="text-muted small fw-normal">Notes</dt>
+            <dd class="mb-0 small fw-semibold">{{ child.notes }}</dd>
+          </div>
+          {% endif %}
+        </dl>
       </div>
     </div>
+
+    {# Vaccination overview #}
     <div class="col-lg-8">
       <div class="info-card h-100">
-        <h4>Vaccination Overview</h4>
-        <div class="row g-3">
-          <div class="col-md-3"><div class="stat-box bg-primary-soft"><span>Completed</span><strong>{{ records|selectattr('dose_status', 'equalto', 'received')|list|length }}</strong></div></div>
-          <div class="col-md-3"><div class="stat-box bg-warning-soft"><span>Due Today</span><strong>{{ schedule|selectattr('status', 'equalto', 'due_today')|list|length }}</strong></div></div>
-          <div class="col-md-3"><div class="stat-box bg-danger-soft"><span>Overdue</span><strong>{{ schedule|selectattr('status', 'equalto', 'overdue')|list|length }}</strong></div></div>
-          <div class="col-md-3"><div class="stat-box bg-success-soft"><span>Upcoming</span><strong>{{ schedule|selectattr('status', 'equalto', 'upcoming')|list|length }}</strong></div></div>
+        <h4 class="mb-3">Vaccination Overview</h4>
+        {% set comp_count  = schedule | selectattr('status', 'equalto', 'completed') | list | length %}
+        {% set over_count  = schedule | selectattr('status', 'equalto', 'overdue')   | list | length %}
+        {% set today_count = schedule | selectattr('status', 'equalto', 'due_today') | list | length %}
+        {% set up_count    = schedule | selectattr('status', 'equalto', 'upcoming')  | list | length %}
+        {% set total       = schedule | length %}
+        {% set pct         = ((comp_count * 100 / total) | round | int) if total else 0 %}
+
+        <div class="row g-3 mb-3">
+          <div class="col-6 col-md-3">
+            <div class="stat-box text-center py-2">
+              <div class="fs-3 fw-bold text-success">{{ comp_count }}</div>
+              <div class="small text-muted">Completed</div>
+            </div>
+          </div>
+          <div class="col-6 col-md-3">
+            <div class="stat-box text-center py-2">
+              <div class="fs-3 fw-bold text-warning">{{ today_count }}</div>
+              <div class="small text-muted">Due Today</div>
+            </div>
+          </div>
+          <div class="col-6 col-md-3">
+            <div class="stat-box text-center py-2">
+              <div class="fs-3 fw-bold text-danger">{{ over_count }}</div>
+              <div class="small text-muted">Overdue</div>
+            </div>
+          </div>
+          <div class="col-6 col-md-3">
+            <div class="stat-box text-center py-2">
+              <div class="fs-3 fw-bold text-info">{{ up_count }}</div>
+              <div class="small text-muted">Upcoming</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="d-flex justify-content-between small mb-1">
+          <span>Overall schedule progress</span>
+          <strong>{{ comp_count }} of {{ total }} doses</strong>
+        </div>
+        <div class="progress" style="height:10px;" role="progressbar"
+             aria-valuenow="{{ pct }}" aria-valuemin="0" aria-valuemax="100">
+          <div class="progress-bar bg-success" style="width:{{ pct }}%"></div>
         </div>
       </div>
     </div>
   </div>
 
-  <div class="card-form">
-    <h3>Schedule and status</h3>
+  {# ── Schedule table ──────────────────────────────────────────────────────── #}
+  <div class="info-card mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h3 class="h5 mb-0">Vaccination Schedule</h3>
+      <span class="small text-muted">{{ schedule | length }} scheduled dose{% if schedule | length != 1 %}s{% endif %}</span>
+    </div>
+
+    {% if schedule %}
     <div class="table-responsive">
-      <table class="table table-hover align-middle">
-        <thead>
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-light">
           <tr>
             <th>Vaccine</th>
             <th>Dose</th>
             <th>Due Date</th>
             <th>Status</th>
+            <th>Timeline</th>
           </tr>
         </thead>
         <tbody>
           {% for item in schedule %}
           <tr>
-            <td><a href="{{ url_for('main.vaccine_information', vaccine_id=item.vaccine.id) }}">{{ item.vaccine.name }}</a></td>
-            <td>{{ item.label }}</td>
-            <td>{{ item.due_date }}</td>
             <td>
-              <span class="badge {% if item.status == 'completed' %}bg-success{% elif item.status == 'due_today' %}bg-warning{% elif item.status == 'overdue' %}bg-danger{% else %}bg-primary{% endif %}">
-                {{ item.status }}
+              <a href="{{ url_for('main.vaccine_information', vaccine_id=item.vaccine.id) }}"
+                 class="text-decoration-none fw-semibold">{{ item.vaccine.name }}</a>
+            </td>
+            <td class="small text-muted">{{ item.label }}</td>
+            <td class="small">{{ item.due_date.strftime('%d %b %Y') }}</td>
+            <td>
+              <span class="badge
+                {% if item.status == 'completed' %}text-bg-success
+                {% elif item.status == 'due_today' %}text-bg-warning
+                {% elif item.status == 'overdue' %}text-bg-danger
+                {% else %}text-bg-info{% endif %}">
+                {{ item.status | replace('_', ' ') | title }}
               </span>
+            </td>
+            <td class="small">
+              {% if item.status == 'completed' %}
+                <span class="text-success"><i class="bi bi-check-circle-fill me-1"></i>Completed</span>
+              {% elif item.status == 'due_today' %}
+                <span class="text-warning fw-semibold"><i class="bi bi-clock-history me-1"></i>Due today</span>
+              {% elif item.status == 'overdue' %}
+                <span class="text-danger fw-semibold due-delta" data-due="{{ item.due_date.isoformat() }}"><i class="bi bi-exclamation-triangle-fill me-1"></i>Overdue</span>
+              {% else %}
+                <span class="text-muted due-delta" data-due="{{ item.due_date.isoformat() }}"><i class="bi bi-hourglass-split me-1"></i>Upcoming</span>
+              {% endif %}
             </td>
           </tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
+    {% else %}
+    <p class="text-muted mb-0">No schedule items found.</p>
+    {% endif %}
   </div>
 
+  {# ── Healthcare worker: record vaccine form ───────────────────────────────── #}
   {% if current_user.role in ['healthcare_worker', 'admin'] %}
-  <div class="card-form mt-4">
-    <h3>Record a vaccine</h3>
+  <div class="info-card mb-4 border-primary">
+    <h3 class="h5 mb-3 text-primary"><i class="bi bi-clipboard2-pulse me-2"></i>Record Administered Vaccine</h3>
     <form method="POST" action="{{ url_for('main.record_vaccine', child_id=child.id) }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="row g-3">
         <div class="col-md-5">
-          <label class="form-label">Vaccine</label>
+          <label class="form-label fw-semibold">Vaccine</label>
           <select class="form-select" name="vaccine_id">
             {% for vaccine in vaccines %}
-              <option value="{{ vaccine.id }}">{{ vaccine.name }}</option>
+            <option value="{{ vaccine.id }}">{{ vaccine.name }}</option>
             {% endfor %}
           </select>
         </div>
         <div class="col-md-3">
-          <label class="form-label">Administered Date</label>
+          <label class="form-label fw-semibold">Administered Date</label>
           <input type="date" class="form-control" name="administered_date" value="{{ today_date }}">
         </div>
         <div class="col-md-4">
-          <label class="form-label">Notes</label>
-          <input type="text" class="form-control" name="notes" placeholder="Optional notes">
+          <label class="form-label fw-semibold">Notes</label>
+          <input type="text" class="form-control" name="notes" placeholder="Batch / facility notes">
         </div>
       </div>
-      <button type="submit" class="btn btn-primary mt-3">Record Vaccine</button>
+      <button type="submit" class="btn btn-primary mt-3">
+        <i class="bi bi-check2-circle me-1"></i>Submit Vaccination Record
+      </button>
     </form>
   </div>
   {% endif %}
+
+  {# ── Vaccination history ─────────────────────────────────────────────────── #}
+  {% if records %}
+  <div class="info-card">
+    <h3 class="h5 mb-3">Vaccination History</h3>
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>Date</th>
+            <th>Vaccine</th>
+            <th>Dose</th>
+            <th>Recorded By</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for rec in records %}
+          <tr>
+            <td class="small">{{ rec.administered_date.strftime('%d %b %Y') if rec.administered_date else '—' }}</td>
+            <td class="fw-semibold small">{{ rec.vaccine.name if rec.vaccine else '—' }}</td>
+            <td class="small text-muted">{{ rec.dose_label or '—' }}</td>
+            <td class="small text-muted">
+              {% if rec.worker %}{{ rec.worker.name or rec.worker.username }}{% else %}—{% endif %}
+            </td>
+            <td class="small text-muted">{{ rec.notes or '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
 </section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const today = new Date();
+  today.setHours(0,0,0,0);
+
+  // Calculate age
+  document.querySelectorAll('[data-dob]').forEach(function(el) {
+    const dobStr = el.getAttribute('data-dob');
+    if (!dobStr) return;
+    const dob = new Date(dobStr + 'T00:00:00');
+    let months = (today.getFullYear() - dob.getFullYear()) * 12 + (today.getMonth() - dob.getMonth());
+    if (today.getDate() < dob.getDate()) months--;
+    if (months < 0) months = 0;
+    if (months < 24) {
+      el.textContent = months + ' mo old';
+    } else {
+      const years = Math.floor(months / 12);
+      const rem = months % 12;
+      el.textContent = years + ' yr' + (years > 1 ? 's' : '') + (rem > 0 ? ' ' + rem + ' mo' : '') + ' old';
+    }
+  });
+
+  // Calculate relative days
+  document.querySelectorAll('.due-delta[data-due]').forEach(function(el) {
+    const dueStr = el.getAttribute('data-due');
+    if (!dueStr) return;
+    const due = new Date(dueStr + 'T00:00:00');
+    const diffTime = due.getTime() - today.getTime();
+    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+    if (diffDays === 0) {
+      el.innerHTML = '<span class="text-warning fw-semibold"><i class="bi bi-clock-history me-1"></i>Due today</span>';
+    } else if (diffDays > 0) {
+      el.innerHTML = '<span class="text-info"><i class="bi bi-hourglass-split me-1"></i>in ' + diffDays + ' day' + (diffDays > 1 ? 's' : '') + '</span>';
+    } else {
+      el.innerHTML = '<span class="text-danger fw-semibold"><i class="bi bi-exclamation-triangle-fill me-1"></i>' + (-diffDays) + ' day' + ((-diffDays) > 1 ? 's' : '') + ' ago</span>';
+    }
+  });
+});
+</script>
 {% endblock %}

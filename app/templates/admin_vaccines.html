@@ -1,0 +1,143 @@
+{% extends 'base.html' %}
+{% block title %}Vaccines & Schedules · VaxiCare{% endblock %}
+
+{% block content %}
+<section class="container py-5">
+  <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
+    <div>
+      <span class="eyebrow">Administration</span>
+      <h1 class="mb-1">Vaccine & Schedule Management</h1>
+      <p class="text-muted mb-0">Official immunization schedule and national registry definitions.</p>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="{{ url_for('main.admin_dashboard') }}" class="btn btn-outline-primary">Back to dashboard</a>
+      <a href="{{ url_for('main.add_vaccine') }}" class="btn btn-primary">Add new vaccine</a>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-sm-6 col-md-4">
+      <div class="stat-box bg-primary-soft">
+        <span>Registered vaccines</span>
+        <strong>{{ vaccines|length }}</strong>
+      </div>
+    </div>
+    <div class="col-sm-6 col-md-4">
+      <div class="stat-box bg-success-soft">
+        <span>Scheduled milestone doses</span>
+        <strong>{{ schedules|length }}</strong>
+      </div>
+    </div>
+    <div class="col-sm-6 col-md-4">
+      <div class="stat-box bg-warning-soft">
+        <span>Total doses administered</span>
+        <strong>{{ admin_counts.values()|sum }}</strong>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-4">
+    <div class="col-lg-8">
+      <div class="card-form mb-4">
+        <h2 class="h4 mb-3">National Immunization Registry Vaccines</h2>
+        <div class="table-responsive">
+          <table class="table table-hover align-middle">
+            <thead class="table-light">
+              <tr>
+                <th>Vaccine Name</th>
+                <th>Target Disease</th>
+                <th>Category</th>
+                <th>Recommended Age</th>
+                <th>Administered</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for v in vaccines %}
+                <tr>
+                  <td>
+                    <strong>{{ v.name }}</strong>
+                    <div class="small text-muted">{{ v.description|truncate(60) }}</div>
+                  </td>
+                  <td>{{ v.disease }}</td>
+                  <td><span class="badge text-bg-light">{{ v.category }}</span></td>
+                  <td>{{ v.recommended_age }}</td>
+                  <td>
+                    <strong>{{ admin_counts.get(v.id, 0) }}</strong> doses
+                  </td>
+                </tr>
+              {% else %}
+                <tr>
+                  <td colspan="5" class="text-center py-4 text-muted">No vaccines found.</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card-form">
+        <h2 class="h4 mb-3">Dose Schedule Milestones</h2>
+        <div class="table-responsive">
+          <table class="table table-hover align-middle">
+            <thead class="table-light">
+              <tr>
+                <th>Vaccine</th>
+                <th>Dose Label</th>
+                <th>Scheduled Age</th>
+                <th>Mandatory</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for s in schedules %}
+                <tr>
+                  <td><strong>{{ s.vaccine.name if s.vaccine else '—' }}</strong></td>
+                  <td>{{ s.dose_label }}</td>
+                  <td>{{ s.age_days }} days (approx. {{ (s.age_days / 30.4)|round(1) }} mo)</td>
+                  <td>
+                    <span class="badge text-bg-success">Scheduled</span>
+                  </td>
+                </tr>
+              {% else %}
+                <tr>
+                  <td colspan="4" class="text-center py-4 text-muted">No schedule milestones found.</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-4">
+      <div class="card-form">
+        <h2 class="h4 mb-3">Quick Add Vaccine</h2>
+        <p class="small text-muted mb-3">Define a new vaccine entry aligned with the UIP schedule.</p>
+        <form method="POST" action="{{ url_for('main.add_vaccine') }}">
+          {{ form.hidden_tag() }}
+          <div class="mb-3">
+            <label class="form-label">Vaccine Name</label>
+            <input class="form-control" type="text" name="name" placeholder="e.g. Hexavalent" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Disease Target</label>
+            <input class="form-control" type="text" name="disease" placeholder="e.g. Polio, Tetanus" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Category</label>
+            <input class="form-control" type="text" name="category" placeholder="e.g. Primary">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Recommended Age</label>
+            <input class="form-control" type="text" name="recommended_age" placeholder="e.g. 6 weeks">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Description</label>
+            <textarea class="form-control" name="description" rows="3" placeholder="Clinical notes & indication" required></textarea>
+          </div>
+          <button type="submit" class="btn btn-primary w-100">Add to Registry</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

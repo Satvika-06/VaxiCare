@@ -178,6 +178,17 @@ def send_sms_notification(
 
 
 def send_test_sms(user, recipient):
+    one_hour_ago = utcnow() - timedelta(hours=1)
+    recent_count = SmsNotification.query.filter(
+        SmsNotification.message_type == "test",
+        SmsNotification.created_at >= one_hour_ago,
+    ).count()
+    if recent_count >= 10:
+        return {
+            "status": "failed",
+            "message": "Rate limit exceeded: maximum 10 test SMS attempts per hour.",
+        }
+
     notification = _queue_sms(user, None, None, "test", "en", None, recipient_override=recipient)
     if isinstance(notification, dict):
         return notification
@@ -325,3 +336,171 @@ def send_vaccination_reminder_email(recipient, child_name, vaccine_name, dose_la
                 return {"status": "sent", "message": "Email accepted by SMTP server.", "smtp_response": "250 OK"}
     except Exception as exc:
         return {"status": "failed", "message": f"SMTP delivery failed: {exc}"}
+
+
+
+def run_due_reminder_check(today=None):
+    from app.models import (
+        ApplicationSetting, Child, EmailReminderNotification,
+        SchedulerRunState, SmsNotification, Vaccine,
+        VaccinationSchedule, utcnow, db,
+    )
+    from app.scheduling import build_child_schedule
+
+    today = today or date.today()
+
+    setting_enabled = ApplicationSetting.query.filter_by(key="automatic_email_reminders_enabled").first()
+    email_enabled = setting_enabled.value.lower() in {"true", "1", "yes", "on"} if setting_enabled else False
+
+    setting_days = ApplicationSetting.query.filter_by(key="email_reminder_days_before").first()
+    try:
+        days_before = int(setting_days.value) if setting_days else 3
+    except (ValueError, TypeError):
+        days_before = 3
+
+    created_email_count = 0
+    created_sms_count = 0
+    skipped_count = 0
+
+    children = Child.query.all()
+    for child in children:
+        parent = child.parent
+        if not parent or not parent.user:
+            continue
+        user = parent.user
+
+        schedule_entries = build_child_schedule(child, today=today)
+        for entry in schedule_entries:
+            sched = entry["schedule"]
+            vaccine = entry["vaccine"]
+            due_date = entry["due_date"]
+            status = entry["status"]
+
+            reminder_type = None
+            if status == "due_today":
+                reminder_type = "due_today"
+            elif status == "overdue":
+                reminder_type = "overdue"
+            elif status == "upcoming" and (due_date - today).days <= days_before:
+                reminder_type = "upcoming"
+
+            if not reminder_type:
+                continue
+
+            # 1. Automatic email reminder
+            if email_enabled and user.email:
+                existing_email = EmailReminderNotification.query.filter_by(
+                    child_id=child.id,
+                    schedule_id=sched.id,
+                    reminder_type=reminder_type,
+                    due_date=due_date,
+                    is_test=False,
+                ).first()
+                if not existing_email:
+                    email_result = send_vaccination_reminder_email(
+                        recipient=user.email,
+                        child_name=child.name,
+                        vaccine_name=vaccine.name,
+                        dose_label=sched.dose_label,
+                        due_date=due_date,
+                        reminder_type=reminder_type,
+                        is_test=False,
+                    )
+                    email_record = EmailReminderNotification(
+                        user_id=user.id,
+                        child_id=child.id,
+                        vaccine_id=vaccine.id,
+                        schedule_id=sched.id,
+                        recipient=user.email,
+                        due_date=due_date,
+                        reminder_type=reminder_type,
+                        status=email_result.get("status", "sent"),
+                        failure_reason=email_result.get("message") if email_result.get("status") in {"failed", "simulated"} else None,
+                        provider_response=email_result.get("smtp_response"),
+                        is_test=False,
+                        sent_at=utcnow() if email_result.get("status") == "sent" else None,
+                    )
+                    db.session.add(email_record)
+                    try:
+                        db.session.commit()
+                        created_email_count += 1
+                    except Exception:
+                        db.session.rollback()
+                        skipped_count += 1
+                else:
+                    skipped_count += 1
+
+            # 2. Automatic SMS reminder
+            if user.sms_consent and user.mobile:
+                sms_res = send_sms_notification(
+                    user=user,
+                    child=child,
+                    vaccine=vaccine,
+                    reminder_type=reminder_type,
+                    language="en",
+                    scheduled_for=due_date,
+                    schedule_id=sched.id,
+                )
+                if isinstance(sms_res, dict):
+                    if sms_res.get("status") in {"sent", "simulated"}:
+                        created_sms_count += 1
+                    elif sms_res.get("status") == "duplicate":
+                        skipped_count += 1
+
+    state = SchedulerRunState.query.filter_by(name="vaccination_reminders").first()
+    if not state:
+        state = SchedulerRunState(name="vaccination_reminders")
+        db.session.add(state)
+    state.last_started_at = utcnow()
+    state.last_completed_at = utcnow()
+    state.status = "idle"
+    state.last_result = f"Processed {len(children)} children: generated {created_email_count} emails, {created_sms_count} SMS, {skipped_count} skipped/duplicates."
+    db.session.commit()
+
+    return {
+        "status": "success",
+        "email_count": created_email_count,
+        "sms_count": created_sms_count,
+        "skipped_count": skipped_count,
+        "message": state.last_result,
+    }
+
+
+def retry_failed_notification(channel, notification_id):
+    from app.models import SmsNotification, EmailReminderNotification, db, utcnow
+
+    if channel == "sms":
+        notification = db.session.get(SmsNotification, notification_id)
+        if not notification:
+            return {"status": "error", "message": "SMS notification not found."}
+        if notification.status not in {"failed", "pending", "simulated"}:
+            return {"status": "error", "message": f"Cannot retry notification with status '{notification.status}'."}
+        res = _attempt_delivery(notification, require_consent=bool(notification.user_id))
+        return res
+    elif channel == "email":
+        notification = db.session.get(EmailReminderNotification, notification_id)
+        if not notification:
+            return {"status": "error", "message": "Email notification not found."}
+        if notification.status not in {"failed", "simulated"}:
+            return {"status": "error", "message": f"Cannot retry notification with status '{notification.status}'."}
+        child_name = notification.child.name if notification.child else "Child"
+        vaccine_name = notification.vaccine.name if notification.vaccine else "Vaccine"
+        dose_label = notification.schedule.dose_label if notification.schedule else "Dose"
+        res = send_vaccination_reminder_email(
+            recipient=notification.recipient,
+            child_name=child_name,
+            vaccine_name=vaccine_name,
+            dose_label=dose_label,
+            due_date=notification.due_date,
+            reminder_type=notification.reminder_type,
+            is_test=notification.is_test,
+        )
+        notification.status = res.get("status", "sent")
+        notification.failure_reason = res.get("message") if res.get("status") in {"failed", "simulated"} else None
+        notification.provider_response = res.get("smtp_response")
+        if res.get("status") == "sent":
+            notification.sent_at = utcnow()
+        db.session.commit()
+        return res
+    else:
+        return {"status": "error", "message": "Invalid notification channel."}
