@@ -1,0 +1,36 @@
+{% extends 'base.html' %}
+{% block title %}{{ t('awareness_title') }}{% endblock %}
+
+{% block content %}
+<section class="container py-5">
+  <div class="section-heading mb-4">
+    <span class="eyebrow">{{ t('awareness_title') }}</span>
+    <h1>Vaccine Awareness</h1>
+    <p class="text-muted">Search the vaccine catalogue and review schedule-linked information.</p>
+  </div>
+  <form method="GET" class="row g-2 mb-4" role="search">
+    <div class="col-md-8">
+      <label class="visually-hidden" for="vaccine-search">Search vaccine name or disease</label>
+      <input id="vaccine-search" class="form-control" type="search" name="search" value="{{ search }}" placeholder="Search vaccine or disease">
+    </div>
+    <div class="col-md-2"><button class="btn btn-primary w-100" type="submit">Search</button></div>
+    <div class="col-md-2"><a class="btn btn-outline-secondary w-100" href="{{ url_for('main.vaccine_awareness') }}">Clear</a></div>
+  </form>
+  <div class="row g-4">
+    {% for vaccine in vaccines %}
+      <div class="col-md-6">
+        <div class="info-card h-100">
+          <h4>{{ vaccine.name }}</h4>
+          <p class="text-primary">{{ vaccine.disease }}</p>
+          <p>{{ vaccine.description }}</p>
+          <p><strong>Recommended age:</strong> {{ vaccine.recommended_age }}</p>
+          <a class="btn btn-sm btn-outline-primary" href="{{ url_for('main.vaccine_information', vaccine_id=vaccine.id) }}">View vaccine information</a>
+        </div>
+      </div>
+    {% endfor %}
+    {% if not vaccines %}
+      <div class="col-12"><div class="info-card text-center text-muted">No vaccines match that search.</div></div>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

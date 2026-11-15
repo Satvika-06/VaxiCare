@@ -1,0 +1,47 @@
+{% extends 'base.html' %}
+{% block title %}User management · VaxiCare{% endblock %}
+
+{% block content %}
+<section class="container py-5">
+  <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
+    <div><span class="eyebrow">Administration</span><h1 class="mb-1">User management</h1><p class="text-muted mb-0">Create individual parent, healthcare-worker, and administrator accounts.</p></div>
+    <a href="{{ url_for('main.admin_dashboard') }}" class="btn btn-outline-primary">Back to dashboard</a>
+  </div>
+  <div class="row g-4">
+    <div class="col-lg-5">
+      <div class="card-form">
+        <h2 class="h4">Create account</h2>
+        <form method="POST">
+          {{ form.hidden_tag() }}
+          <div class="mb-3">{{ form.username.label(class_='form-label') }}{{ form.username(class_='form-control', autocomplete='off') }}</div>
+          <div class="mb-3">{{ form.email.label(class_='form-label') }}{{ form.email(class_='form-control') }}</div>
+          <div class="mb-3">{{ form.password.label(class_='form-label') }}{{ form.password(class_='form-control', autocomplete='new-password') }}</div>
+          <div class="mb-3">{{ form.role.label(class_='form-label') }}{{ form.role(class_='form-select') }}</div>
+          <div class="row">
+            <div class="col-md-6 mb-3">{{ form.first_name.label(class_='form-label') }}{{ form.first_name(class_='form-control') }}</div>
+            <div class="col-md-6 mb-3">{{ form.last_name.label(class_='form-label') }}{{ form.last_name(class_='form-control') }}</div>
+          </div>
+          {{ form.submit(class_='btn btn-primary') }}
+        </form>
+      </div>
+    </div>
+    <div class="col-lg-7">
+      <div class="card-form">
+        <h2 class="h4">Recent accounts</h2>
+        <div class="table-responsive">
+          <table class="table table-hover align-middle">
+            <thead><tr><th>Username</th><th>Email</th><th>Role</th><th>Created</th></tr></thead>
+            <tbody>
+              {% for user in users %}
+                <tr><td>{{ user.username }}</td><td>{{ user.email }}</td><td><span class="badge text-bg-light">{{ user.role|replace('_', ' ')|title }}</span></td><td>{{ user.created_at.strftime('%d %b %Y') if user.created_at else '—' }}</td></tr>
+              {% else %}
+                <tr><td colspan="4" class="text-muted">No users found.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

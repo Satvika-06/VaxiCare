@@ -1,0 +1,95 @@
+{% extends 'base.html' %}
+{% block title %}Notification history · VaxiCare{% endblock %}
+
+{% block content %}
+<section class="container py-5">
+  <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
+    <div><span class="eyebrow">Administration</span><h1 class="mb-1">Notification history</h1><p class="text-muted mb-0">Sent indicates provider acceptance, not handset delivery.</p></div>
+    <a href="{{ url_for('main.admin_dashboard') }}" class="btn btn-outline-primary">Back to dashboard</a>
+  </div>
+  <form method="GET" class="row g-2 align-items-end mb-4">
+    <div class="col-sm-4">
+      <label class="form-label" for="status">Filter by status</label>
+      <select class="form-select" id="status" name="status">
+        <option value="">All statuses</option>
+        {% for status in ['sent', 'failed', 'pending', 'simulated', 'skipped', 'disabled'] %}
+          <option value="{{ status }}" {% if status_filter == status %}selected{% endif %}>{{ status|title }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-sm-2"><button class="btn btn-primary" type="submit">Apply filter</button></div>
+  </form>
+  <div class="card-form mb-4" id="fcm-history">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+      <div>
+        <h2 class="h4 mb-1">Browser push (FCM)</h2>
+        <p class="small text-muted mb-0">Parent device identifiers and credentials are never shown here.</p>
+      </div>
+      <span class="small text-muted">Automatic FCM: {{ 'enabled' if fcm_enabled else 'disabled' }}</span>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-hover align-middle">
+        <thead><tr><th>Logged (UTC)</th><th>Parent</th><th>Child / vaccine / dose</th><th>Due</th><th>Type</th><th>Status</th><th>Failure</th></tr></thead>
+        <tbody>
+          {% for item in push_notifications %}
+            <tr>
+              <td>{{ item.created_at.strftime('%d %b %Y %H:%M') }}</td>
+              <td>{{ item.user.email if item.user else '—' }}</td>
+              <td>{{ item.child.name if item.child else '—' }}{% if item.vaccine %}<div class="small text-muted">{{ item.vaccine.name }} / {{ item.schedule.dose_label if item.schedule else '—' }}</div>{% endif %}</td>
+              <td>{{ item.due_date.strftime('%d %b %Y') }}</td>
+              <td>{{ item.reminder_type|replace('_', ' ')|title }}</td>
+              <td><span class="badge {% if item.status == 'sent' %}text-bg-success{% elif item.status == 'failed' %}text-bg-danger{% else %}text-bg-warning{% endif %}">{{ item.status|title }}</span></td>
+              <td>{{ item.failure_reason or '—' }}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="7" class="text-center text-muted py-4">No browser push notifications found.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="card-form mb-4" id="fcm-test-history">
+    <h2 class="h4">Own-browser push test history</h2>
+    <p class="small text-muted">Test sends are scoped to the signed-in parent’s own browser. Device identifiers are not displayed.</p>
+    <div class="table-responsive">
+      <table class="table table-hover align-middle">
+        <thead><tr><th>Logged (UTC)</th><th>Parent</th><th>Status</th><th>Failure</th></tr></thead>
+        <tbody>
+          {% for item in push_test_attempts %}
+            <tr>
+              <td>{{ item.created_at.strftime('%d %b %Y %H:%M') }}</td>
+              <td>{{ item.user.email if item.user else '—' }}</td>
+              <td><span class="badge {% if item.status == 'sent' %}text-bg-success{% elif item.status == 'failed' %}text-bg-danger{% else %}text-bg-warning{% endif %}">{{ item.status|title }}</span></td>
+              <td>{{ item.failure_reason or '—' }}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="4" class="text-center text-muted py-4">No browser push tests found.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="card-form">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle">
+        <thead><tr><th>Logged</th><th>Recipient</th><th>Child / vaccine</th><th>Due</th><th>Type</th><th>Status</th><th>Message / result</th></tr></thead>
+        <tbody>
+          {% for item in notifications %}
+            <tr>
+              <td>{{ item.created_at.strftime('%d %b %Y %H:%M') }}</td>
+              <td>{{ item.recipient }}</td>
+              <td>{{ item.child.name if item.child else 'Test message' }}{% if item.vaccine %}<div class="small text-muted">{{ item.vaccine.name }}</div>{% endif %}</td>
+              <td>{{ item.due_date.strftime('%d %b %Y') if item.due_date else '—' }}</td>
+              <td>{{ item.message_type|replace('_', ' ')|title }}</td>
+              <td><span class="badge {% if item.status == 'sent' %}text-bg-success{% elif item.status == 'failed' %}text-bg-danger{% elif item.status == 'simulated' %}text-bg-info{% elif item.status in ['skipped', 'disabled'] %}text-bg-secondary{% else %}text-bg-warning{% endif %}">{{ item.status|title }}</span></td>
+              <td class="notification-message">{{ item.message }}{% if item.failure_reason %}<div class="small text-danger mt-1">{{ item.failure_reason }}</div>{% endif %}{% if item.provider_message_id %}<div class="small text-muted">Provider ID: {{ item.provider_message_id }}</div>{% endif %}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="7" class="text-center text-muted py-4">No notifications found.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+{% endblock %}

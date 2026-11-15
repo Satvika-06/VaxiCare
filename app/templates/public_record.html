@@ -1,0 +1,33 @@
+{% extends 'base.html' %}
+{% block title %}{{ child.name }} Record{% endblock %}
+
+{% block content %}
+<section class="container py-5">
+  <div class="card-form">
+    <h2>{{ child.name }} – Record Overview</h2>
+    <p><strong>DOB:</strong> {{ child.dob }} | <strong>Village:</strong> {{ child.village }}</p>
+    <div class="table-responsive mt-3">
+      <table class="table table-hover">
+        <thead>
+          <tr>
+            <th>Vaccine</th>
+            <th>Dose</th>
+            <th>Due Date</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in schedule %}
+            <tr>
+              <td><a href="{{ url_for('main.vaccine_information', vaccine_id=item.vaccine.id) }}">{{ item.vaccine.name }}</a></td>
+              <td>{{ item.label }}</td>
+              <td>{{ item.due_date }}</td>
+              <td><span class="badge {% if item.status == 'completed' %}bg-success{% elif item.status == 'due_today' %}bg-warning{% elif item.status == 'overdue' %}bg-danger{% else %}bg-primary{% endif %}">{{ item.status }}</span></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,75 @@
+{% extends 'base.html' %}
+{% block title %}{{ t('register_title') }}{% endblock %}
+
+{% block content %}
+<section class="auth-shell container py-4 py-lg-5">
+  <div class="auth-card">
+    <aside class="auth-aside">
+      <a class="auth-brand" href="{{ url_for('main.home') }}"><span class="brand-mark">V</span> VaxiCare</a>
+      <div class="auth-illustration" aria-hidden="true"><i class="bi bi-heart-pulse-fill"></i><span class="auth-orbit"><i class="bi bi-emoji-smile-fill"></i></span></div>
+      <h1>A healthier start for your child.</h1>
+      <p>Keep immunization records and upcoming vaccine dates together in one trusted place.</p>
+      <div class="auth-trust"><i class="bi bi-shield-check" aria-hidden="true"></i> Your family health records stay private</div>
+    </aside>
+    <div class="auth-content">
+      <div class="auth-form-wrap">
+        <span class="eyebrow">Parent portal</span>
+        <h2 class="mt-3 mb-2">Create your family account</h2>
+        <p class="text-muted mb-4">Add your details to start managing your child’s vaccination schedule.</p>
+        <form method="POST" novalidate>
+          {{ form.hidden_tag() }}
+          <div class="row g-3">
+            {% for field in [form.first_name, form.last_name, form.username, form.email] %}
+            <div class="col-md-6">
+              {{ field.label(class_='form-label') }}
+              {{ field(class_='form-control', autocomplete='email' if field.name == 'email' else 'username' if field.name == 'username' else 'given-name' if field.name == 'first_name' else 'family-name') }}
+              {% for error in field.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+            </div>
+            {% endfor %}
+            <div class="col-12">
+              {{ form.mobile.label(class_='form-label') }}
+              {{ form.mobile(class_='form-control', placeholder='+919876543210', autocomplete='tel') }}
+              <div class="form-text">Optional. Use international format, for example +919876543210.</div>
+              {% for error in form.mobile.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+            </div>
+            <div class="col-12">
+              <div class="form-check">
+                {{ form.sms_consent(class_='form-check-input') }}
+                {{ form.sms_consent.label(class_='form-check-label') }}
+              </div>
+              <div class="form-text">SMS reminders are optional. Phone ownership is not verified during registration.</div>
+            </div>
+            <div class="col-12">
+              {{ form.password.label(class_='form-label') }}
+              <div class="password-input">
+                {{ form.password(class_='form-control', id='register-password', autocomplete='new-password') }}
+                <button class="password-toggle" type="button" data-password-toggle="register-password" aria-label="Show password" aria-pressed="false"><i class="bi bi-eye" aria-hidden="true"></i></button>
+              </div>
+              {% for error in form.password.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+            </div>
+          </div>
+          <div class="mt-4">{{ form.submit(class_='btn btn-primary btn-lg w-100 auth-submit', value='Create Parent Account') }}</div>
+        </form>
+        <div class="auth-separator"><span>Already registered?</span></div>
+        <p class="auth-bottom">Welcome back <a href="{{ url_for('main.parent_login') }}">Parent sign in</a></p>
+        <div class="auth-role-links"><a href="{{ url_for('main.admin_login') }}">Admin sign in</a><a href="{{ url_for('main.healthcare_login') }}">Healthcare worker sign in</a></div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  document.querySelectorAll("[data-password-toggle]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const input = document.getElementById(button.dataset.passwordToggle);
+      const visible = input.type === "password";
+      input.type = visible ? "text" : "password";
+      button.setAttribute("aria-pressed", String(visible));
+      button.setAttribute("aria-label", visible ? "Hide password" : "Show password");
+      button.innerHTML = `<i class="bi ${visible ? "bi-eye-slash" : "bi-eye"}" aria-hidden="true"></i>`;
+    });
+  });
+</script>
+{% endblock %}

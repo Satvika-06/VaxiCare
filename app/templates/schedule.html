@@ -1,0 +1,76 @@
+{% extends 'base.html' %}
+{% block title %}{{ t('schedule_title') }}{% endblock %}
+
+{% block content %}
+<section class="container py-5">
+  <div class="section-heading mb-4">
+    <span class="eyebrow">{{ t('section_schedule') }}</span>
+    <h1>{{ t('schedule_title') }}</h1>
+    <p class="text-muted">{{ t('source_note') }}</p>
+    <p class="text-warning small">{{ t('medical_notice') }}</p>
+  </div>
+
+  {% if public_view %}
+    <div class="card-form">
+      <h2 class="h4">Immunization schedule reference</h2>
+      <p class="text-muted">This view contains schedule information only; child records are private to authorized accounts.</p>
+      <div class="table-responsive">
+        <table class="table table-striped align-middle">
+          <thead><tr><th>Vaccine</th><th>Dose</th><th>Recommended timing</th><th>Information</th></tr></thead>
+          <tbody>
+            {% for entry in schedule_catalog %}
+              <tr>
+                <td>{{ entry.vaccine.name }}</td>
+                <td>{{ entry.dose_label }}</td>
+                <td>{{ entry.description or (entry.age_days|string ~ ' days after birth') }}</td>
+                <td><a href="{{ url_for('main.vaccine_information', vaccine_id=entry.vaccine_id) }}">Vaccine details</a></td>
+              </tr>
+            {% else %}
+              <tr><td colspan="4" class="text-muted">No vaccine schedule configured.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% elif children %}
+    {% for child, schedule in child_schedules %}
+      <div class="card-form mb-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h3>{{ child.name }}</h3>
+          <a href="{{ url_for('main.child_detail', child_id=child.id) }}" class="btn btn-outline-primary btn-sm">View</a>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-striped align-middle">
+            <thead>
+              <tr>
+                <th>Vaccine</th>
+                <th>Dose</th>
+                <th>Due Date</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% if schedule %}
+                {% for item in schedule %}
+                  <tr>
+                    <td><a href="{{ url_for('main.vaccine_information', vaccine_id=item.vaccine.id) }}">{{ item.vaccine.name }}</a></td>
+                    <td>{{ item.label }}</td>
+                    <td>{{ item.due_date }}</td>
+                    <td><span class="badge {% if item.status == 'completed' %}bg-success{% elif item.status == 'due_today' %}bg-warning{% elif item.status == 'overdue' %}bg-danger{% else %}bg-primary{% endif %}">{{ item.status }}</span></td>
+                  </tr>
+                {% endfor %}
+              {% else %}
+                <tr>
+                  <td colspan="4" class="text-muted">No vaccine schedule configured yet for this child.</td>
+                </tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    {% endfor %}
+  {% else %}
+    <div class="info-card">No child profile available yet.</div>
+  {% endif %}
+</section>
+{% endblock %}

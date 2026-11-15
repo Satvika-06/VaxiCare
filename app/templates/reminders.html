@@ -1,0 +1,72 @@
+{% extends 'base.html' %}
+{% block title %}{{ t('reminder_title') }}{% endblock %}
+
+{% block content %}
+<section class="container py-5">
+  <div class="section-heading mb-4">
+    <span class="eyebrow">{{ t('reminder_title') }}</span>
+    <h1>Reminder Centre</h1>
+  </div>
+
+  <div class="row g-4">
+    <div class="col-lg-5">
+      <div class="card-form">
+        <h3>Send reminder</h3>
+        <p class="small text-muted">Only scheduled doses in the selected status can be sent. SMS consent, a valid phone number, and provider configuration are required for real SMS.</p>
+        <form method="POST">
+          {{ form.hidden_tag() }}
+          <div class="mb-3">
+            {{ form.child_id.label(class_='form-label') }}
+            {{ form.child_id(class_='form-select') }}
+          </div>
+          <div class="mb-3">
+            {{ form.vaccine_id.label(class_='form-label') }}
+            {{ form.vaccine_id(class_='form-select') }}
+          </div>
+          <div class="mb-3">
+            {{ form.reminder_type.label(class_='form-label') }}
+            {{ form.reminder_type(class_='form-select') }}
+          </div>
+          <div class="mb-3">
+            {{ form.language.label(class_='form-label') }}
+            {{ form.language(class_='form-select') }}
+          </div>
+          {{ form.submit(class_='btn btn-primary') }}
+        </form>
+      </div>
+    </div>
+    <div class="col-lg-7">
+      <div class="card-form">
+        <h3>Recent reminder history</h3>
+        <div class="table-responsive">
+          <table class="table table-sm table-hover">
+            <thead>
+              <tr>
+                <th>Child</th>
+                <th>Vaccine</th>
+                <th>Due</th>
+                <th>Type</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for log in reminder_logs %}
+                <tr>
+                  <td>{{ log.child.name }}</td>
+                  <td>{{ log.vaccine.name }}</td>
+                  <td>{{ log.due_date.strftime('%d %b %Y') if log.due_date else '—' }}</td>
+                  <td>{{ log.message_type|replace('_', ' ')|title }}</td>
+                  <td><span class="badge {% if log.status == 'sent' %}text-bg-success{% elif log.status == 'failed' %}text-bg-danger{% elif log.status == 'simulated' %}text-bg-info{% elif log.status == 'skipped' %}text-bg-secondary{% else %}text-bg-warning{% endif %}">{{ log.status|title }}</span></td>
+                </tr>
+                {% if log.failure_reason %}<tr><td colspan="5" class="small text-muted">{{ log.failure_reason }}</td></tr>{% endif %}
+              {% else %}
+                <tr><td colspan="5" class="text-muted">No SMS reminders logged yet.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}
