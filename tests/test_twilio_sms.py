@@ -1,15 +1,6 @@
+
 """
 Tests for VaxiCare Twilio SMS Integration & Diagnostic Tools
-Verifies:
-- Phone number normalization (E.164 formatting)
-- Mobile validation
-- Twilio credentials loading and mock SDK dispatch
-- Message SID verification on acceptance
-- Error handling (Auth failure, Unverified number, Insufficient balance, Network timeout)
-- Credential leak prevention in logs and messages
-- Admin dashboard Send Test SMS route integration
-- Rate limit enforcement (max 10 test SMS per hour)
-- Automated reminders non-live protection
 """
 
 import os
@@ -22,7 +13,15 @@ import pytest
 from twilio.base.exceptions import TwilioRestException
 
 from app import create_app, db
-from app.models import Child, Parent, SmsNotification, User, Vaccine, VaccinationSchedule, utcnow
+from app.models import (
+    Child,
+    Parent,
+    SmsNotification,
+    User,
+    Vaccine,
+    VaccinationSchedule,
+    utcnow,
+)
 from app.services import (
     is_valid_mobile_number,
     normalize_phone_number,
@@ -36,24 +35,21 @@ def twilio_app():
     db_fd, db_path = tempfile.mkstemp(suffix="_test_twilio.db")
     os.close(db_fd)
 
-    
-app = create_app({
-    "TESTING": True,
-    "SQLALCHEMY_DATABASE_URI": f"sqlite:///{db_path}",
-    "WTF_CSRF_ENABLED": False,
-    "SECRET_KEY": "test-only-secret-key",
-    "SEED_DEMO_DATA": False,
-
-    "TWILIO_ACCOUNT_SID": os.getenv("TWILIO_ACCOUNT_SID"),
-    "TWILIO_AUTH_TOKEN": os.getenv("TWILIO_AUTH_TOKEN"),
-    "TWILIO_PHONE_NUMBER": os.getenv("TWILIO_PHONE_NUMBER"),
-
-    "SMS_FORCE_DEMO": True,
-})
-
+    app = create_app({
+        "TESTING": True,
+        "SQLALCHEMY_DATABASE_URI": f"sqlite:///{db_path}",
+        "WTF_CSRF_ENABLED": False,
+        "SECRET_KEY": "test-only-secret-key",
+        "SEED_DEMO_DATA": False,
+        "TWILIO_ACCOUNT_SID": os.getenv("TWILIO_ACCOUNT_SID"),
+        "TWILIO_AUTH_TOKEN": os.getenv("TWILIO_AUTH_TOKEN"),
+        "TWILIO_PHONE_NUMBER": os.getenv("TWILIO_PHONE_NUMBER"),
+        "SMS_FORCE_DEMO": False,
+    })
 
     with app.app_context():
         db.create_all()
+
         admin = User(
             username="twilio_admin",
             email="twilio_admin@example.com",
@@ -75,7 +71,12 @@ app = create_app({
         db.session.add(parent_u)
         db.session.commit()
 
-        parent_prof = Parent(user_id=parent_u.id, first_name="Aarohi", last_name="Sharma", village="Kalyan")
+        parent_prof = Parent(
+            user_id=parent_u.id,
+            first_name="Aarohi",
+            last_name="Sharma",
+            village="Kalyan",
+        )
         db.session.add(parent_prof)
         db.session.commit()
 
@@ -114,6 +115,7 @@ app = create_app({
     with app.app_context():
         db.session.remove()
         db.engine.dispose()
+
     try:
         if os.path.exists(db_path):
             os.remove(db_path)
@@ -137,20 +139,15 @@ def login_admin(client, username="twilio_admin", password="AdminSecure#2026"):
 # ---------------------------------------------------------------------------
 # Test 1: Phone number normalization
 # ---------------------------------------------------------------------------
+
 def test_phone_normalization():
-    # E.164 with +
     assert normalize_phone_number("+919121478435") == "+919121478435"
     assert normalize_phone_number("+91 91214 78435") == "+919121478435"
     assert normalize_phone_number("+91-91214-78435") == "+919121478435"
-    # 10 digits
     assert normalize_phone_number("9121478435") == "+919121478435"
-    # 11 digits with leading 0
     assert normalize_phone_number("09121478435") == "+919121478435"
-    # 12 digits starting with 91
     assert normalize_phone_number("919121478435") == "+919121478435"
-    # US number
     assert normalize_phone_number("+1 (555) 123-4567") == "+15551234567"
-    # Invalid formats
     assert normalize_phone_number("12345") is None
     assert normalize_phone_number("invalid-text") is None
     assert normalize_phone_number("") is None
@@ -160,6 +157,7 @@ def test_phone_normalization():
 # ---------------------------------------------------------------------------
 # Test 2: Mobile validation
 # ---------------------------------------------------------------------------
+
 def test_is_valid_mobile_number():
     assert is_valid_mobile_number("+919121478435") is True
     assert is_valid_mobile_number("9121478435") is True
@@ -173,6 +171,7 @@ def test_is_valid_mobile_number():
 # ---------------------------------------------------------------------------
 # Test 3: Mocked Twilio send test SMS success with SID
 # ---------------------------------------------------------------------------
+
 def test_send_test_sms_success_mocked(twilio_app):
     with twilio_app.app_context():
         admin = User.query.filter_by(username="twilio_admin").first()
@@ -180,6 +179,7 @@ def test_send_test_sms_success_mocked(twilio_app):
         with patch("app.services.Client") as mock_client_cls:
             mock_client = MagicMock()
             mock_client_cls.return_value = mock_client
+
             mock_message = MagicMock()
             mock_message.sid = "SM998877665544332211"
             mock_client.messages.create.return_value = mock_message
@@ -192,20 +192,24 @@ def test_send_test_sms_success_mocked(twilio_app):
 
             mock_client.messages.create.assert_called_once()
             call_kwargs = mock_client.messages.create.call_args[1]
+
             assert call_kwargs["to"] == "+919121478435"
             assert call_kwargs["from_"] == "+919121478435"
             assert "VaxiCare" in call_kwargs["body"]
 
-            # Verify saved DB record
-            saved = SmsNotification.query.filter_by(provider_message_id="SM998877665544332211").first()
+            saved = SmsNotification.query.filter_by(
+                provider_message_id="SM998877665544332211"
+            ).first()
+
             assert saved is not None
             assert saved.status == "sent"
             assert saved.recipient == "+919121478435"
 
 
 # ---------------------------------------------------------------------------
-# Test 4: Twilio Authentication Failure (Token protected)
+# Test 4: Twilio Authentication Failure
 # ---------------------------------------------------------------------------
+
 def test_send_test_sms_auth_failure_mocked(twilio_app):
     with twilio_app.app_context():
         admin = User.query.filter_by(username="twilio_admin").first()
@@ -213,6 +217,7 @@ def test_send_test_sms_auth_failure_mocked(twilio_app):
         with patch("app.services.Client") as mock_client_cls:
             mock_client = MagicMock()
             mock_client_cls.return_value = mock_client
+
             mock_client.messages.create.side_effect = TwilioRestException(
                 status=401,
                 uri="/2010-04-01/Accounts/AC0dc.../Messages.json",
@@ -224,13 +229,13 @@ def test_send_test_sms_auth_failure_mocked(twilio_app):
 
             assert res["status"] == "failed"
             assert "Twilio authentication failed" in res["message"]
-            # Ensure secret tokens are not leaked
             assert "fbb163d" not in res["message"]
 
 
 # ---------------------------------------------------------------------------
 # Test 5: Twilio Unverified Trial Number Restriction
 # ---------------------------------------------------------------------------
+
 def test_send_test_sms_unverified_number_mocked(twilio_app):
     with twilio_app.app_context():
         admin = User.query.filter_by(username="twilio_admin").first()
@@ -238,6 +243,7 @@ def test_send_test_sms_unverified_number_mocked(twilio_app):
         with patch("app.services.Client") as mock_client_cls:
             mock_client = MagicMock()
             mock_client_cls.return_value = mock_client
+
             mock_client.messages.create.side_effect = TwilioRestException(
                 status=400,
                 uri="/2010-04-01/Accounts/AC0dc.../Messages.json",
@@ -254,6 +260,7 @@ def test_send_test_sms_unverified_number_mocked(twilio_app):
 # ---------------------------------------------------------------------------
 # Test 6: Twilio Insufficient Balance / Permissions
 # ---------------------------------------------------------------------------
+
 def test_send_test_sms_insufficient_balance_mocked(twilio_app):
     with twilio_app.app_context():
         admin = User.query.filter_by(username="twilio_admin").first()
@@ -261,6 +268,7 @@ def test_send_test_sms_insufficient_balance_mocked(twilio_app):
         with patch("app.services.Client") as mock_client_cls:
             mock_client = MagicMock()
             mock_client_cls.return_value = mock_client
+
             mock_client.messages.create.side_effect = TwilioRestException(
                 status=400,
                 uri="/2010-04-01/Accounts/AC0dc.../Messages.json",
@@ -277,6 +285,7 @@ def test_send_test_sms_insufficient_balance_mocked(twilio_app):
 # ---------------------------------------------------------------------------
 # Test 7: Network timeout / connection error
 # ---------------------------------------------------------------------------
+
 def test_send_test_sms_network_error(twilio_app):
     with twilio_app.app_context():
         admin = User.query.filter_by(username="twilio_admin").first()
@@ -284,7 +293,10 @@ def test_send_test_sms_network_error(twilio_app):
         with patch("app.services.Client") as mock_client_cls:
             mock_client = MagicMock()
             mock_client_cls.return_value = mock_client
-            mock_client.messages.create.side_effect = ConnectionError("Connection refused by gateway")
+
+            mock_client.messages.create.side_effect = ConnectionError(
+                "Connection refused by gateway"
+            )
 
             res = send_test_sms(admin, "+919121478435")
 
@@ -293,38 +305,43 @@ def test_send_test_sms_network_error(twilio_app):
 
 
 # ---------------------------------------------------------------------------
-# Test 8: Rate limit on Send Test SMS (10 attempts per hour)
+# Test 8: Rate limit on Send Test SMS
 # ---------------------------------------------------------------------------
+
 def test_send_test_sms_rate_limit(twilio_app):
     with twilio_app.app_context():
         admin = User.query.filter_by(username="twilio_admin").first()
 
-        # Insert 10 test attempts
         for _ in range(10):
-            db.session.add(SmsNotification(
-                recipient="+919121478435",
-                message_type="test",
-                message="Rate limit test",
-                status="sent",
-                created_at=utcnow(),
-            ))
+            db.session.add(
+                SmsNotification(
+                    recipient="+919121478435",
+                    message_type="test",
+                    message="Rate limit test",
+                    status="sent",
+                    created_at=utcnow(),
+                )
+            )
+
         db.session.commit()
 
-        # 11th call should immediately fail rate limit
         res = send_test_sms(admin, "+919121478435")
+
         assert res["status"] == "failed"
         assert "Rate limit exceeded" in res["message"]
 
 
 # ---------------------------------------------------------------------------
-# Test 9: Admin Dashboard Send Test SMS Route (Success)
+# Test 9: Admin Dashboard Send Test SMS Route
 # ---------------------------------------------------------------------------
+
 def test_admin_send_test_sms_route_mocked(twilio_app, twilio_client):
     login_admin(twilio_client)
 
     with patch("app.services.Client") as mock_client_cls:
         mock_client = MagicMock()
         mock_client_cls.return_value = mock_client
+
         mock_message = MagicMock()
         mock_message.sid = "SMabcdef1234567890"
         mock_client.messages.create.return_value = mock_message
@@ -336,23 +353,28 @@ def test_admin_send_test_sms_route_mocked(twilio_app, twilio_client):
         )
 
         assert res.status_code == 200
+
         html = res.get_data(as_text=True)
         assert "SMabcdef1234567890" in html
 
 
 # ---------------------------------------------------------------------------
-# Test 10: Vaccination Milestone SMS Reminder (Child Immunization)
+# Test 10: Vaccination Milestone SMS Reminder
 # ---------------------------------------------------------------------------
+
 def test_send_vaccination_sms_reminder_mocked(twilio_app):
     with twilio_app.app_context():
         parent_user = User.query.filter_by(username="parent_twilio").first()
         child = Child.query.filter_by(name="Aarav Sharma").first()
         vaccine = Vaccine.query.filter_by(name="BCG").first()
-        sched = VaccinationSchedule.query.filter_by(vaccine_id=vaccine.id).first()
+        sched = VaccinationSchedule.query.filter_by(
+            vaccine_id=vaccine.id
+        ).first()
 
         with patch("app.services.Client") as mock_client_cls:
             mock_client = MagicMock()
             mock_client_cls.return_value = mock_client
+
             mock_message = MagicMock()
             mock_message.sid = "SMmilestone1234567"
             mock_client.messages.create.return_value = mock_message
@@ -376,8 +398,9 @@ def test_send_vaccination_sms_reminder_mocked(twilio_app):
 
 
 # ---------------------------------------------------------------------------
-# Test 11: Twilio Error 572006 (Trial template restriction)
+# Test 11: Twilio Error 572006
 # ---------------------------------------------------------------------------
+
 def test_twilio_trial_template_restriction_572006(twilio_app):
     with twilio_app.app_context():
         admin_user = User.query.filter_by(username="twilio_admin").first()
@@ -389,9 +412,13 @@ def test_twilio_trial_template_restriction_572006(twilio_app):
             exc = TwilioRestException(
                 status=400,
                 uri="/Accounts/AC123/Messages",
-                msg="Unable to create record: Invalid template name. Trial accounts can only use predefined SMS templates.",
+                msg=(
+                    "Unable to create record: Invalid template name. "
+                    "Trial accounts can only use predefined SMS templates."
+                ),
                 code=572006,
             )
+
             mock_client.messages.create.side_effect = exc
 
             result = send_test_sms(admin_user, "+919121478435")
@@ -402,8 +429,9 @@ def test_twilio_trial_template_restriction_572006(twilio_app):
 
 
 # ---------------------------------------------------------------------------
-# Test 12: Demo Mode makes zero Twilio API calls and never reports 'sent'
+# Test 12: Demo Mode makes zero Twilio API calls
 # ---------------------------------------------------------------------------
+
 def test_demo_mode_zero_twilio_api_calls(twilio_app):
     with twilio_app.app_context():
         twilio_app.config["SMS_FORCE_DEMO"] = True
@@ -412,33 +440,41 @@ def test_demo_mode_zero_twilio_api_calls(twilio_app):
         with patch("app.services.Client") as mock_client_cls:
             result = send_test_sms(admin_user, "+919121478435")
 
-            # Zero Twilio Client calls made
             mock_client_cls.assert_not_called()
 
-            # Status must be simulated, never sent
             assert result["status"] == "simulated"
             assert result["status"] != "sent"
-            assert result["message"] == "SMS simulated successfully — no message was sent."
+            assert result["message"] == (
+                "SMS simulated successfully — no message was sent."
+            )
             assert result.get("sid") is None
 
-            # Database audit verification
-            last_record = SmsNotification.query.order_by(SmsNotification.id.desc()).first()
+            last_record = SmsNotification.query.order_by(
+                SmsNotification.id.desc()
+            ).first()
+
             assert last_record is not None
             assert last_record.status == "simulated"
-            assert last_record.failure_reason == "SMS simulated successfully — no message was sent."
+            assert last_record.failure_reason == (
+                "SMS simulated successfully — no message was sent."
+            )
             assert last_record.provider_message_id is None
 
 
 # ---------------------------------------------------------------------------
-# Test 13: Demo Mode with Child Vaccination Milestone Reminder
+# Test 13: Demo Mode with Child Vaccination Reminder
 # ---------------------------------------------------------------------------
+
 def test_demo_mode_child_vaccination_reminder(twilio_app):
     with twilio_app.app_context():
         twilio_app.config["SMS_FORCE_DEMO"] = True
+
         parent_user = User.query.filter_by(username="parent_twilio").first()
         child = Child.query.filter_by(name="Aarav Sharma").first()
         vaccine = Vaccine.query.filter_by(name="BCG").first()
-        sched = VaccinationSchedule.query.filter_by(vaccine_id=vaccine.id).first()
+        sched = VaccinationSchedule.query.filter_by(
+            vaccine_id=vaccine.id
+        ).first()
 
         with patch("app.services.Client") as mock_client_cls:
             res = send_sms_notification(
@@ -451,15 +487,18 @@ def test_demo_mode_child_vaccination_reminder(twilio_app):
                 schedule_id=sched.id,
             )
 
-            # Zero Twilio calls
             mock_client_cls.assert_not_called()
 
             assert res["status"] == "simulated"
             assert res["status"] != "sent"
-            assert res["message"] == "SMS simulated successfully — no message was sent."
+            assert res["message"] == (
+                "SMS simulated successfully — no message was sent."
+            )
 
-            # Verify notification record contains proper child and vaccine data
-            last_record = SmsNotification.query.order_by(SmsNotification.id.desc()).first()
+            last_record = SmsNotification.query.order_by(
+                SmsNotification.id.desc()
+            ).first()
+
             assert last_record.child_id == child.id
             assert last_record.vaccine_id == vaccine.id
             assert "Aarav Sharma" in last_record.message
@@ -468,8 +507,9 @@ def test_demo_mode_child_vaccination_reminder(twilio_app):
 
 
 # ---------------------------------------------------------------------------
-# Test 14: Real Twilio path remains fully operational when demo mode is false
+# Test 14: Real Twilio path when demo mode is false
 # ---------------------------------------------------------------------------
+
 def test_real_twilio_path_when_demo_mode_false(twilio_app):
     with twilio_app.app_context():
         twilio_app.config["SMS_FORCE_DEMO"] = False
@@ -478,13 +518,13 @@ def test_real_twilio_path_when_demo_mode_false(twilio_app):
         with patch("app.services.Client") as mock_client_cls:
             mock_client = MagicMock()
             mock_client_cls.return_value = mock_client
+
             mock_msg = MagicMock()
             mock_msg.sid = "SMreal_delivery_sid_999"
             mock_client.messages.create.return_value = mock_msg
 
             res = send_test_sms(admin_user, "+919121478435")
 
-            # Twilio Client must be instantiated and called
             mock_client_cls.assert_called_once()
             mock_client.messages.create.assert_called_once()
 
@@ -493,58 +533,75 @@ def test_real_twilio_path_when_demo_mode_false(twilio_app):
 
 
 # ---------------------------------------------------------------------------
-# Test 15: Demo Mode prohibited in production environment
+# Test 15: Demo Mode prohibited in production
 # ---------------------------------------------------------------------------
+
 def test_demo_mode_prohibited_in_production(monkeypatch):
     monkeypatch.setenv("FLASK_ENV", "production")
-    monkeypatch.setenv("SECRET_KEY", "super-secret-production-key-1234567890")
+    monkeypatch.setenv(
+        "SECRET_KEY",
+        "super-secret-production-key-1234567890",
+    )
     monkeypatch.setenv("SMS_FORCE_DEMO", "true")
 
-    with pytest.raises(RuntimeError, match="SMS Demo Mode is strictly prohibited in production"):
-        create_app({
-            "TESTING": False,
-        })
+    with pytest.raises(
+        RuntimeError,
+        match="SMS Demo Mode is strictly prohibited in production",
+    ):
+        create_app({"TESTING": False})
 
 
 # ---------------------------------------------------------------------------
-# Test 16: Admin dashboard displays amber DEMO MODE indicator
+# Test 16: Admin dashboard displays DEMO MODE indicator
 # ---------------------------------------------------------------------------
+
 def test_admin_dashboard_demo_mode_display(twilio_client, twilio_app):
     with twilio_app.app_context():
         twilio_app.config["SMS_FORCE_DEMO"] = True
 
     login_admin(twilio_client)
+
     res = twilio_client.get("/admin-dashboard")
     assert res.status_code == 200
+
     html = res.get_data(as_text=True)
     assert "DEMO MODE — NOT SENT" in html
 
-    # Post a test SMS and check amber warning alert
     post_res = twilio_client.post(
         "/admin/send-test-sms",
         data={"recipient": "+919121478435"},
         follow_redirects=True,
     )
+
     assert post_res.status_code == 200
+
     post_html = post_res.get_data(as_text=True)
+
     assert "SMS simulated successfully — no message was sent." in post_html
     assert "alert-warning" in post_html
     assert "DEMO MODE — NOT SENT" in post_html
 
 
 # ---------------------------------------------------------------------------
-# Test 17: Unified Notification Center displays amber DEMO MODE indicator
+# Test 17: Unified Notification Center displays DEMO MODE indicator
 # ---------------------------------------------------------------------------
-def test_unified_notification_center_demo_mode_display(twilio_client, twilio_app):
+
+def test_unified_notification_center_demo_mode_display(
+    twilio_client,
+    twilio_app,
+):
     with twilio_app.app_context():
         twilio_app.config["SMS_FORCE_DEMO"] = True
         admin = User.query.filter_by(username="twilio_admin").first()
         send_test_sms(admin, "+919121478435")
 
     login_admin(twilio_client)
+
     res = twilio_client.get("/admin/notifications?channel=sms")
     assert res.status_code == 200
+
     html = res.get_data(as_text=True)
+
     assert "DEMO MODE — NOT SENT" in html
     assert "Simulated (Demo Mode)" in html
     assert "SMS simulated successfully — no message was sent." in html

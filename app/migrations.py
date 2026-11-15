@@ -28,7 +28,7 @@ def upgrade_existing_database():
         db.session.execute(
             text(
                 "UPDATE users SET mobile_verified_at = created_at "
-                "WHERE mobile_verified = 1 AND mobile_verified_at IS NULL"
+                "WHERE mobile_verified IS TRUE AND mobile_verified_at IS NULL"
             )
         )
         db.session.commit()
