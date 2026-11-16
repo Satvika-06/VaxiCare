@@ -322,3 +322,52 @@ def test_duplicate_vaccine_prevention(client):
     
     assert res.status_code == 200
     assert b"already exists" in res.data
+
+
+# ===========================================================================
+# 9. Registration page role switching
+# ===========================================================================
+
+def test_admin_visiting_parent_register_sees_registration_form(client):
+    client.post("/login", data={
+        "username": "audit_admin",
+        "password": "AdminPass123!",
+    })
+    response = client.get("/parent/register")
+    assert response.status_code == 200
+    assert b"<form" in response.data
+    assert b"Administrative Control Center" not in response.data
+
+    # Previous admin session must no longer grant admin access.
+    dashboard = client.get("/admin-dashboard", follow_redirects=False)
+    assert dashboard.status_code == 302
+
+
+def test_worker_visiting_parent_register_sees_registration_form(client):
+    client.post("/login", data={
+        "username": "audit_worker",
+        "password": "WorkerPass123!",
+    })
+    response = client.get("/parent/register")
+    assert response.status_code == 200
+    assert b"<form" in response.data
+
+
+def test_admin_visiting_healthcare_register_sees_registration_form(client):
+    client.post("/login", data={
+        "username": "audit_admin",
+        "password": "AdminPass123!",
+    })
+    response = client.get("/healthcare/register")
+    assert response.status_code == 200
+    assert b"<form" in response.data
+
+
+def test_parent_visiting_own_register_redirects_to_parent_dashboard(client):
+    client.post("/login", data={
+        "username": "audit_parent1",
+        "password": "ParentPass123!",
+    })
+    response = client.get("/parent/register", follow_redirects=False)
+    assert response.status_code == 302
+    assert "/parent-dashboard" in response.headers["Location"]

@@ -167,7 +167,11 @@ def parent_register():
 
 def parent_registration():
     if current_user.is_authenticated:
-        return _redirect_by_role(current_user)
+        if current_user.role == "parent":
+            return _redirect_by_role(current_user)
+        # Switch from admin/worker session to parent registration.
+        logout_user()
+        session.clear()
     form = RegistrationForm()
     if form.validate_on_submit():
         username = form.username.data.strip()
@@ -237,7 +241,11 @@ def parent_registration():
 @main.route("/healthcare/register", methods=["GET", "POST"])
 def healthcare_register():
     if current_user.is_authenticated:
-        return _redirect_by_role(current_user)
+        if current_user.role == "healthcare_worker":
+            return _redirect_by_role(current_user)
+        # Switch from admin/parent session to worker registration.
+        logout_user()
+        session.clear()
     form = HealthcareWorkerRegistrationForm()
     if form.validate_on_submit():
         username = form.username.data.strip()
