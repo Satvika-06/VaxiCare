@@ -79,6 +79,14 @@ def create_app(test_config=None):
         raw_db_url = raw_db_url.replace("postgres://", "postgresql://", 1)
 
     app.config["SQLALCHEMY_DATABASE_URI"] = raw_db_url
+    if raw_db_url.startswith("postgresql://"):
+        app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+            "pool_pre_ping": True,
+            "pool_recycle": 300,
+            "pool_size": 5,
+            "max_overflow": 2,
+            "pool_timeout": 30,
+        }
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
     _ensure_sqlite_directory(app)
     app.config["SESSION_COOKIE_HTTPONLY"] = True
