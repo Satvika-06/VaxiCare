@@ -12,7 +12,7 @@ from flask import (
     render_template, request, send_file, send_from_directory, session, url_for
 )
 from flask_login import current_user, login_required, login_user, logout_user
-from sqlalchemy import func
+from sqlalchemy import extract,func
 
 from app.forms import (
     AdminRegistrationForm, AdminUserForm, AutomaticEmailReminderSettingsForm,
@@ -1676,18 +1676,28 @@ def admin_dashboard():
                 overdue_vaccinations_count += 1
 
     # 2. Real SQLite Analytics
-    # Monthly trends (past 12 months)
+        # 2. Database-compatible Analytics
+    # Monthly vaccination trends
+    vaccination_year = extract("year", VaccinationRecord.administered_date)
+    vaccination_month = extract("month", VaccinationRecord.administered_date)
+
     monthly_records = (
         db.session.query(
-            func.strftime("%Y-%m", VaccinationRecord.administered_date).label("month"),
-            func.count(VaccinationRecord.id),
+            vaccination_year.label("year"),
+            vaccination_month.label("month"),
+            func.count(VaccinationRecord.id).label("count"),
         )
         .filter(VaccinationRecord.administered_date.isnot(None))
-        .group_by("month")
-        .order_by("month")
+        .group_by(vaccination_year, vaccination_month)
+        .order_by(vaccination_year, vaccination_month)
         .all()
     )
-    monthly_trends = {m: c for m, c in monthly_records if m}
+
+    monthly_trends = {
+        f"{int(year):04d}-{int(month):02d}": count
+        for year, month, count in monthly_records
+        if year is not None and month is not None
+    }
 
     # Village-wise statistics
     all_villages = sorted(list({c.village for c in all_children if c.village}))
@@ -1716,18 +1726,26 @@ def admin_dashboard():
     vaccine_distribution = {v_name: count for v_name, count in vaccine_dist_raw}
 
     # User registration trends
+    registration_year = extract("year", User.created_at)
+    registration_month = extract("month", User.created_at)
+
     user_reg_raw = (
         db.session.query(
-            func.strftime("%Y-%m", User.created_at).label("month"),
-            func.count(User.id),
+            registration_year.label("year"),
+            registration_month.label("month"),
+            func.count(User.id).label("count"),
         )
         .filter(User.created_at.isnot(None))
-        .group_by("month")
-        .order_by("month")
+        .group_by(registration_year, registration_month)
+        .order_by(registration_year, registration_month)
         .all()
     )
-    user_reg_trends = {m: c for m, c in user_reg_raw if m}
 
+    user_reg_trends = {
+        f"{int(year):04d}-{int(month):02d}": count
+        for year, month, count in user_reg_raw
+        if year is not None and month is not None
+    }
     # 3. Notification logs & stats
     notifications = SmsNotification.query.order_by(SmsNotification.created_at.desc()).limit(12).all()
     notification_counts = Counter(
