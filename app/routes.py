@@ -54,6 +54,15 @@ def apply_security_headers(response):
     response.headers["X-Frame-Options"] = "SAMEORIGIN"
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    # Prevent caching for authenticated sessions and sensitive dashboard endpoints
+    if (
+        current_user.is_authenticated
+        or request.path in {"/dashboard", "/parent-dashboard", "/healthcare-dashboard", "/admin-dashboard"}
+        or request.path.startswith(("/parent", "/healthcare", "/worker", "/admin", "/child"))
+    ):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
     return response
 
 
@@ -308,9 +317,33 @@ def healthcare_login():
     return authenticate(role="healthcare_worker", auth_role="healthcare_worker")
 
 
+def _is_safe_next_url(next_url: str | None, role: str) -> bool:
+    if not next_url:
+        return False
+    parsed = urlparse(next_url)
+    if parsed.netloc != "" or parsed.scheme != "":
+        return False
+    if next_url.startswith(("//", "\\\\")):
+        return False
+    path = parsed.path
+    if role == "parent":
+        if path.startswith(("/admin", "/healthcare", "/worker", "/health-record", "/record-vaccine")):
+            return False
+    elif role == "healthcare_worker":
+        if path.startswith(("/admin", "/parent-dashboard")):
+            return False
+    return True
+
+
 def authenticate(role, auth_role):
     if current_user.is_authenticated:
-        return _redirect_by_role(current_user)
+        if role is not None and current_user.role != role:
+            # Switching roles: clear previous session so the requested role login form renders cleanly
+            logout_user()
+            session.clear()
+        else:
+            flash(f"You are already signed in as {current_user.role.replace('_', ' ').title()}.", "info")
+            return _redirect_by_role(current_user)
 
     form = LoginForm()
     if form.validate_on_submit():
@@ -347,7 +380,7 @@ def authenticate(role, auth_role):
 
 def _redirect_by_role(user):
     next_url = request.args.get("next")
-    if next_url and urlparse(next_url).netloc == "":
+    if next_url and _is_safe_next_url(next_url, user.role):
         return redirect(next_url)
     if user.role == "parent":
         return redirect(url_for("main.parent_dashboard"))
@@ -405,15 +438,18 @@ def healthcare_access():
 
 
 # ---------------------------------------------------------------------------
-# Logout (POST only, CSRF protected)
+# Logout (GET and POST supported)
 # ---------------------------------------------------------------------------
-@main.route("/logout", methods=["POST"])
-@login_required
+@main.route("/logout", methods=["GET", "POST"])
 def logout():
-    logout_user()
+    if current_user.is_authenticated:
+        logout_user()
     session.clear()
     flash("Logged out successfully.", "info")
-    return redirect(url_for("main.home"))
+    response = redirect(url_for("main.home"))
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    return response
 
 
 # ---------------------------------------------------------------------------
@@ -523,12 +559,18 @@ def change_password():
 
 
 # ---------------------------------------------------------------------------
-# Parent dashboard
+# Smart dashboard router
 # ---------------------------------------------------------------------------
 @main.route("/dashboard")
 @login_required
-def parent_dashboard_alias():
-    return parent_dashboard()
+def dashboard():
+    if current_user.role == "parent":
+        return redirect(url_for("main.parent_dashboard"))
+    if current_user.role == "healthcare_worker":
+        return redirect(url_for("main.healthcare_dashboard"))
+    if current_user.role == "admin":
+        return redirect(url_for("main.admin_dashboard"))
+    return redirect(url_for("main.home"))
 
 
 @main.route("/parent-dashboard")
@@ -621,6 +663,15 @@ def add_child():
         return redirect(url_for("main.parent_dashboard"))
     form = ChildProfileForm()
     if form.validate_on_submit():
+        existing_child = Child.query.filter(
+            Child.parent_id == parent.id,
+            func.lower(Child.name) == form.name.data.strip().lower(),
+            Child.dob == form.dob.data,
+        ).first()
+        if existing_child:
+            flash("A child with this name and date of birth is already registered under your account.", "warning")
+            return render_template("child_form.html", form=form)
+
         child = Child(
             parent_id=parent.id,
             name=form.name.data.strip(),
@@ -829,12 +880,23 @@ def vaccination_schedule():
     if current_user.role == "parent":
         parent = current_user.parent
         children = Child.query.filter_by(parent_id=parent.id).all() if parent else []
-    elif current_user.role in {"healthcare_worker", "admin"}:
+    elif current_user.role == "healthcare_worker":
+        worker = current_user.healthcare_worker
+        if worker and worker.village:
+            children = Child.query.filter(func.lower(Child.village) == worker.village.casefold()).order_by(Child.name).all()
+        else:
+            children = []
+    elif current_user.role == "admin":
         children = Child.query.order_by(Child.name).all()
     else:
         abort(403)
     schedule_data = {child: build_child_schedule(child) for child in children}
-    return render_template("schedule.html", schedule_data=schedule_data, children=children)
+    return render_template(
+        "schedule.html",
+        schedule_data=schedule_data,
+        child_schedules=schedule_data.items(),
+        children=children,
+    )
 
 
 @main.route("/awareness")
@@ -2547,6 +2609,10 @@ def add_vaccine():
     if request.method == "GET":
         return render_template("vaccine_form.html", form=form)
     if form.validate_on_submit():
+        existing_vax = Vaccine.query.filter(func.lower(Vaccine.name) == form.name.data.strip().lower()).first()
+        if existing_vax:
+            flash(f"A vaccine named '{form.name.data.strip()}' already exists.", "warning")
+            return render_template("vaccine_form.html", form=form)
         vaccine = Vaccine(
             name=form.name.data.strip(),
             disease=form.disease.data.strip(),
